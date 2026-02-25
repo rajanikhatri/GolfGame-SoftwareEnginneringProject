@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
   # Multiplayer Card Game UI
 
@@ -9,3 +10,6 @@
 
   Run `npm run dev` to start the development server.
   
+=======
+# GolfGame-SoftwareEnginneringProject
+>>>>>>> ab65e78b1f11b24271525552a284f108006a55fd
