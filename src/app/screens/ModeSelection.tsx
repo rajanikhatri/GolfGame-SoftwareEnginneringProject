@@ -17,7 +17,7 @@ export default function ModeSelection() {
 
   const handleSelect = (mode: 'multiplayer' | 'solo') => {
     setGameMode(mode);
-    navigate('/lobby');
+    navigate(mode === 'multiplayer' ? '/multiplayer-lobby' : '/lobby');
   };
 
   return (
