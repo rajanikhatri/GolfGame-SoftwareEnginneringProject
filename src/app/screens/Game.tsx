@@ -64,8 +64,10 @@ function MatchBanner({ countdown }: { countdown: number }) {
 }
 
 // ─── Power Banner ─────────────────────────────────────────────────────────────
-function PowerBanner({ power }: { power: '7' | '8' }) {
+function PowerBanner({ power }: { power: '7' | '8' | '9' | '10' }) {
   const isSelf = power === '7';
+  const isPeekSwap = power === '9';
+  const isSwapOpponents = power === '10';
   return (
     <motion.div
       initial={{ y: -80, opacity: 0 }}
@@ -73,7 +75,11 @@ function PowerBanner({ power }: { power: '7' | '8' }) {
       exit={{ y: -80, opacity: 0 }}
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 90,
-        background: isSelf
+        background: isSwapOpponents
+          ? 'linear-gradient(135deg, #EF6C00, #FFA726, #EF6C00)'
+          : isPeekSwap
+          ? 'linear-gradient(135deg, #00897B, #26A69A, #00897B)'
+          : isSelf
           ? 'linear-gradient(135deg, #1565C0, #42A5F5, #1565C0)'
           : 'linear-gradient(135deg, #6A1B9A, #AB47BC, #6A1B9A)',
         backgroundSize: '200% auto',
@@ -81,7 +87,11 @@ function PowerBanner({ power }: { power: '7' | '8' }) {
         padding: '14px 24px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: 16,
-        boxShadow: isSelf
+        boxShadow: isSwapOpponents
+          ? '0 4px 30px rgba(255,167,38,0.7)'
+          : isPeekSwap
+          ? '0 4px 30px rgba(38,166,154,0.7)'
+          : isSelf
           ? '0 4px 30px rgba(30,136,229,0.7)'
           : '0 4px 30px rgba(171,71,188,0.7)',
         borderBottom: '3px solid rgba(255,255,255,0.5)',
@@ -95,10 +105,14 @@ function PowerBanner({ power }: { power: '7' | '8' }) {
           textShadow: '0 2px 8px rgba(0,0,0,0.4)',
           letterSpacing: '0.04em',
         }}>
-          {isSelf ? '🔍 PEEK YOUR CARD' : '🕵️ SPY POWER!'}
+          {isSwapOpponents ? '🔀 SWAP OPPONENT CARDS' : isPeekSwap ? '👀🔀 PEEK & SWAP' : isSelf ? '🔍 PEEK YOUR CARD' : '🕵️ SPY POWER!'}
         </div>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', fontFamily: 'Nunito' }}>
-          {isSelf
+          {isSwapOpponents
+            ? 'Tap one card from each of two opponents to swap them'
+            : isPeekSwap
+            ? 'Peek at 2 cards from 2 players (including yourself), then swap those cards'
+            : isSelf
             ? 'Tap one of your face-down cards to peek at it for 3 seconds'
             : "Tap one of your opponent's cards to reveal it for 3 seconds"}
         </div>
@@ -163,7 +177,7 @@ function AIThinkingDots() {
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
-  revealCard, powerSelectable, onPowerClick,
+  revealCard, powerSelectable, onPowerClick, powerAllowSelfAny,
 }: {
   player: Player;
   isActive: boolean;
@@ -173,6 +187,7 @@ function PlayerCardGrid({
   revealCard?: { row: number; col: number } | null;
   powerSelectable?: boolean;
   onPowerClick?: (row: number, col: number) => void;
+  powerAllowSelfAny?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -190,7 +205,7 @@ function PlayerCardGrid({
             // - card 7 (peek self): own face-down cards only
             // - card 8 (peek opponent): all opponent cards
             const isPowerTarget = powerSelectable && (
-              isYou ? !card?.faceUp : true
+              isYou ? (powerAllowSelfAny ? true : !card?.faceUp) : true
             );
 
             const handleClick = () => {
@@ -224,7 +239,8 @@ function PlayerCardGrid({
                 {/* Column match indicator — only for your own cards */}
                 {ri === 0 && isYou && player.cards[1]?.[ci] &&
                   card?.faceUp && player.cards[1][ci]?.faceUp &&
-                  card?.value === player.cards[1][ci]?.value && (
+                  card?.value === player.cards[1][ci]?.value &&
+                  (card?.value ?? 0) >= 0 && (
                     <div style={{
                       position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)',
                       background: '#4CAF50', borderRadius: 50, padding: '2px 6px',
@@ -368,6 +384,75 @@ function PileArea({
 }) {
   const canDraw = isMyTurn && phase === 'draw';
   const discardTop = discardPile[0];
+  const [drawnSource, setDrawnSource] = useState<'draw' | 'discard' | null>(null);
+  const [discardFlight, setDiscardFlight] = useState<{
+    key: number;
+    card: Card;
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null>(null);
+  const hideDiscardTopDuringFlight = !!(
+    discardFlight &&
+    discardTop &&
+    discardTop.id === discardFlight.card.id
+  );
+  const pilesRowRef = useRef<HTMLDivElement>(null);
+  const drawPileRef = useRef<HTMLDivElement>(null);
+  const discardPileRef = useRef<HTMLDivElement>(null);
+  const prevDrawnCardRef = useRef<Card | null>(null);
+
+  useEffect(() => {
+    const prevDrawn = prevDrawnCardRef.current;
+    if (
+      prevDrawn &&
+      !drawnCard &&
+      drawnSource === 'draw' &&
+      discardTop &&
+      discardTop.id === prevDrawn.id &&
+      pilesRowRef.current &&
+      drawPileRef.current &&
+      discardPileRef.current
+    ) {
+      const rowRect = pilesRowRef.current.getBoundingClientRect();
+      const fromRect = drawPileRef.current.getBoundingClientRect();
+      const toRect = discardPileRef.current.getBoundingClientRect();
+      setDiscardFlight({
+        key: Date.now(),
+        card: prevDrawn,
+        fromX: fromRect.left - rowRect.left,
+        fromY: fromRect.top - rowRect.top,
+        toX: toRect.left - rowRect.left,
+        toY: toRect.top - rowRect.top,
+      });
+    }
+    prevDrawnCardRef.current = drawnCard;
+  }, [drawnCard, discardTop, drawnSource]);
+
+  useEffect(() => {
+    if (!discardFlight) return;
+    const t = setTimeout(() => setDiscardFlight(null), 420);
+    return () => clearTimeout(t);
+  }, [discardFlight]);
+
+  useEffect(() => {
+    if (!drawnCard && phase === 'draw') {
+      setDrawnSource(null);
+    }
+  }, [drawnCard, phase]);
+
+  const handleDrawClick = () => {
+    if (!canDraw) return;
+    setDrawnSource('draw');
+    onDraw();
+  };
+
+  const handleTakeDiscardClick = () => {
+    if (!canDraw || !discardTop) return;
+    setDrawnSource('discard');
+    onTakeDiscard();
+  };
 
   return (
     <div style={{
@@ -376,7 +461,7 @@ function PileArea({
       alignItems: 'center',
       gap: 16,
     }}>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+      <div ref={pilesRowRef} style={{ display: 'flex', gap: 24, alignItems: 'center', position: 'relative' }}>
         {/* Draw Pile */}
         <div className="flex flex-col items-center gap-2">
           <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
@@ -384,7 +469,8 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={canDraw ? onDraw : undefined}
+            ref={drawPileRef}
+            onClick={canDraw ? handleDrawClick : undefined}
             style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
           >
             {/* Stack shadow layers */}
@@ -405,6 +491,25 @@ function PileArea({
             <div style={{ position: 'relative', zIndex: 4 }}>
               <GameCard faceDown size="lg" glowing={canDraw} />
             </div>
+            {drawnCard && drawnSource === 'draw' && (
+              <motion.div
+                key={`drawn-on-draw-${drawnCard.id}`}
+                initial={{ y: 12, scale: 0.92, opacity: 0 }}
+                animate={{ y: -6, scale: 1, opacity: 1 }}
+                exit={{ y: 12, scale: 0.92, opacity: 0 }}
+                transition={{ type: 'spring', bounce: 0.25, duration: 0.28 }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 20,
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 10px 16px rgba(0,0,0,0.45))',
+                }}
+              >
+                <GameCard card={drawnCard} size="lg" glowing />
+              </motion.div>
+            )}
           </div>
         </div>
 
@@ -424,7 +529,8 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={canDraw && discardTop ? onTakeDiscard : undefined}
+            ref={discardPileRef}
+            onClick={canDraw && discardTop ? handleTakeDiscardClick : undefined}
             style={{ cursor: canDraw && discardTop ? 'pointer' : 'default', position: 'relative' }}
           >
             {discardPile.slice(1, 4).reverse().map((card, i) => (
@@ -448,6 +554,7 @@ function PileArea({
                   initial={{ scale: 1.2, y: -20, opacity: 0.5 }}
                   animate={{ scale: 1, y: 0, opacity: 1 }}
                   transition={{ type: 'spring', bounce: 0.4 }}
+                  style={{ opacity: hideDiscardTopDuringFlight ? 0 : 1 }}
                 >
                   <GameCard card={discardTop} size="lg" glowing={canDraw} />
                 </motion.div>
@@ -462,9 +569,60 @@ function PileArea({
                 </div>
               )}
             </div>
+            {drawnCard && drawnSource === 'discard' && (
+              <motion.div
+                key={`drawn-on-discard-${drawnCard.id}`}
+                initial={{ y: 12, scale: 0.92, opacity: 0 }}
+                animate={{ y: -6, scale: 1, opacity: 1 }}
+                exit={{ y: 12, scale: 0.92, opacity: 0 }}
+                transition={{ type: 'spring', bounce: 0.25, duration: 0.28 }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 24,
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 10px 16px rgba(0,0,0,0.45))',
+                }}
+              >
+                <GameCard card={drawnCard} size="lg" glowing />
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {discardFlight && (
+          <motion.div
+            key={discardFlight.key}
+            initial={{
+              x: discardFlight.fromX,
+              y: discardFlight.fromY - 6,
+              scale: 1,
+              opacity: 1,
+            }}
+            animate={{
+              x: discardFlight.toX,
+              y: discardFlight.toY - 6,
+              scale: 1,
+              opacity: 1,
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ type: 'spring', bounce: 0.18, duration: 0.35 }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              zIndex: 40,
+              pointerEvents: 'none',
+              filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.5))',
+            }}
+          >
+            <GameCard card={discardFlight.card} size="lg" glowing />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Drawn card preview */}
       <AnimatePresence>
@@ -482,16 +640,28 @@ function PileArea({
               fontFamily: 'Nunito', letterSpacing: '0.1em',
             }}>
               DRAWN CARD — SWAP OR DISCARD
-              {(drawnCard.rank === '7' || drawnCard.rank === '8') && (
+              {(drawnCard.rank === '7' || drawnCard.rank === '8' || drawnCard.rank === '9' || drawnCard.rank === '10') && (
                 <span style={{
-                  marginLeft: 8, background: drawnCard.rank === '7' ? '#1565C0' : '#6A1B9A',
+                  marginLeft: 8,
+                  background: drawnCard.rank === '7'
+                    ? '#1565C0'
+                    : drawnCard.rank === '8'
+                    ? '#6A1B9A'
+                    : drawnCard.rank === '9'
+                    ? '#00897B'
+                    : '#EF6C00',
                   borderRadius: 50, padding: '2px 10px', fontSize: 10, color: 'white',
                 }}>
-                  {drawnCard.rank === '7' ? '👁 PEEK SELF' : '🕵️ SPY'}
+                  {drawnCard.rank === '7'
+                    ? '👁 PEEK SELF'
+                    : drawnCard.rank === '8'
+                    ? '🕵️ SPY'
+                    : drawnCard.rank === '9'
+                    ? '👀🔀 PEEK+SWAP'
+                    : '🔀 SWAP OPP'}
                 </span>
               )}
             </div>
-            <GameCard card={drawnCard} size="md" glowing />
           </motion.div>
         )}
       </AnimatePresence>
@@ -507,7 +677,7 @@ export default function Game() {
     drawnCard, phase, finalRound, knockedBy,
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, knock,
-    initGame, pendingPower, resolvePower,
+    initGame, pendingPower, resolvePower, powerNotice,
     gameMode, mySlotIndex,
   } = useGame();
 
@@ -518,6 +688,10 @@ export default function Game() {
   const [peekedCard, setPeekedCard] = useState<{
     playerIndex: number; row: number; col: number;
   } | null>(null);
+  const [swapPowerFirstTarget, setSwapPowerFirstTarget] = useState<{
+    playerIndex: number; row: number; col: number;
+  } | null>(null);
+  const [powerToast, setPowerToast] = useState<{ id: number; message: string } | null>(null);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Redirect if no game
@@ -549,17 +723,83 @@ export default function Game() {
     setSwapMode(phase === 'swap' && currentPlayerIndex === myIdx);
   }, [phase, currentPlayerIndex, gameMode, mySlotIndex]);
 
-  const handleCardClick = useCallback((row: number, col: number) => {
-    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
-    if (phase === 'swap' && currentPlayerIndex === myIdx) {
-      swapCard(row, col);
-      setSwapMode(false);
+  useEffect(() => {
+    if (phase !== 'power' || (pendingPower !== '10' && pendingPower !== '9')) {
+      setSwapPowerFirstTarget(null);
     }
-  }, [phase, currentPlayerIndex, swapCard, gameMode, mySlotIndex]);
+  }, [phase, pendingPower]);
+
+  useEffect(() => {
+    if (!powerNotice) return;
+    setPowerToast(powerNotice);
+    const t = setTimeout(() => setPowerToast((prev) => (prev?.id === powerNotice.id ? null : prev)), 2600);
+    return () => clearTimeout(t);
+  }, [powerNotice]);
+
+  useEffect(() => {
+    if (phase !== 'power' || pendingPower !== '7' || players.length === 0) return;
+    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+    const myCards = players[myIdx]?.cards ?? [];
+    const hasFaceDownCard = myCards.some((row) => row.some((card) => card && !card.faceUp));
+    if (!hasFaceDownCard) {
+      if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+      const t = setTimeout(() => resolvePower(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [phase, pendingPower, players, gameMode, mySlotIndex, resolvePower]);
 
   // Called when player taps a card during power phase
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
     if (!pendingPower) return;
+    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+    const actorName = players[myIdx]?.name || 'You';
+    const targetPlayerName = players[playerIndex]?.name || 'opponent';
+
+    if (pendingPower === '9' || pendingPower === '10') {
+      if (pendingPower === '10' && playerIndex === myIdx) return;
+      const nextTarget = { playerIndex, row, col };
+      if (!swapPowerFirstTarget) {
+        setSwapPowerFirstTarget(nextTarget);
+        if (pendingPower === '9') {
+          setPeekedCard(nextTarget);
+        }
+        return;
+      }
+      if (swapPowerFirstTarget.playerIndex === playerIndex) {
+        // Must choose a different player on the second pick; replace first selection.
+        setSwapPowerFirstTarget(nextTarget);
+        if (pendingPower === '9') {
+          setPeekedCard(nextTarget);
+        }
+        return;
+      }
+      if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
+      if (pendingPower === '9') {
+        setPeekedCard(nextTarget);
+        peekTimerRef.current = setTimeout(() => {
+          setPeekedCard(null);
+          const firstName = players[swapPowerFirstTarget.playerIndex]?.name || 'Player';
+          const secondName = players[nextTarget.playerIndex]?.name || 'Player';
+          const firstTarget = swapPowerFirstTarget;
+          setSwapPowerFirstTarget(null);
+          resolvePower({
+            targets: [firstTarget, nextTarget],
+            notice: `${actorName} peeked and swapped cards between ${firstName} and ${secondName}`,
+          });
+        }, 1800);
+      } else {
+        const firstName = players[swapPowerFirstTarget.playerIndex]?.name || 'Player';
+        const secondName = players[nextTarget.playerIndex]?.name || 'Player';
+        const firstTarget = swapPowerFirstTarget;
+        setSwapPowerFirstTarget(null);
+        resolvePower({
+          targets: [firstTarget, nextTarget],
+          notice: `${actorName} swapped cards between ${firstName} and ${secondName}`,
+        });
+      }
+      return;
+    }
+
     // Clear any existing peek timer
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
 
@@ -568,9 +808,26 @@ export default function Game() {
     // Reveal for 3 seconds then resolve power
     peekTimerRef.current = setTimeout(() => {
       setPeekedCard(null);
-      resolvePower();
+      resolvePower({
+        target: { playerIndex, row, col },
+        notice: pendingPower === '7'
+          ? `${actorName} peeked at their own card`
+          : `${actorName} peeked at ${targetPlayerName}'s card`,
+      });
     }, 3000);
-  }, [pendingPower, resolvePower]);
+  }, [pendingPower, resolvePower, gameMode, mySlotIndex, swapPowerFirstTarget, players]);
+
+  const handleCardClick = useCallback((row: number, col: number) => {
+    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+    if (phase === 'power' && pendingPower === '9' && currentPlayerIndex === myIdx) {
+      handlePowerCardClick(myIdx, row, col);
+      return;
+    }
+    if (phase === 'swap' && currentPlayerIndex === myIdx) {
+      swapCard(row, col);
+      setSwapMode(false);
+    }
+  }, [phase, pendingPower, currentPlayerIndex, swapCard, gameMode, mySlotIndex, handlePowerCardClick]);
 
   if (players.length === 0) return null;
 
@@ -588,6 +845,15 @@ export default function Game() {
   const pRight = players[rightIdx];
 
   const isMyTurn = currentPlayerIndex === myIdx;
+  const getPowerRevealForPlayer = (playerIndex: number) => {
+    if (pendingPower === '9' && swapPowerFirstTarget?.playerIndex === playerIndex) {
+      return { row: swapPowerFirstTarget.row, col: swapPowerFirstTarget.col };
+    }
+    if (peekedCard?.playerIndex === playerIndex) {
+      return { row: peekedCard.row, col: peekedCard.col };
+    }
+    return null;
+  };
 
   const calcVisibleScore = (p: Player) => {
     let total = 0;
@@ -595,7 +861,7 @@ export default function Game() {
       row.forEach((card, ci) => {
         if (card?.faceUp) {
           const other = p.cards[ri === 0 ? 1 : 0]?.[ci];
-          if (other?.faceUp && other.value === card.value) return;
+          if (other?.faceUp && other.value === card.value && card.value >= 0) return;
           total += card.value;
         }
       });
@@ -605,7 +871,10 @@ export default function Game() {
 
   // Power mode derived from pendingPower
   const powerMode = pendingPower === '7' ? 'peek_self'
-    : pendingPower === '8' ? 'peek_opponent' : null;
+    : pendingPower === '8' ? 'peek_opponent'
+    : pendingPower === '9' ? 'peek_swap_any'
+    : pendingPower === '10' ? 'swap_opponents'
+    : null;
 
   return (
     <div
@@ -655,16 +924,49 @@ export default function Game() {
           </>
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {powerToast && (
+          <motion.div
+            key={powerToast.id}
+            initial={{ y: -16, opacity: 0, scale: 0.96 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -10, opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'fixed',
+              top: 66,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 85,
+              maxWidth: 'min(88vw, 720px)',
+              background: 'rgba(5,16,33,0.92)',
+              border: '1px solid rgba(77,182,172,0.45)',
+              borderRadius: 12,
+              padding: '8px 14px',
+              boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
+              color: 'rgba(255,255,255,0.92)',
+              fontSize: 12,
+              fontWeight: 800,
+              fontFamily: 'Nunito, sans-serif',
+              letterSpacing: '0.02em',
+              textAlign: 'center',
+            }}
+          >
+            {powerToast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header bar */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 20px',
-        background: 'rgba(0,0,0,0.25)',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        position: 'relative', zIndex: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        padding: 0,
+        background: 'transparent',
+        borderBottom: 'none',
+        position: 'fixed', top: 14, right: 16, zIndex: 20,
         flexShrink: 0,
       }}>
+        {false && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{
             fontSize: 28, fontWeight: 900,
@@ -697,7 +999,9 @@ export default function Game() {
             <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>★=-1</span>
           </div>
         </div>
+        )}
 
+        {false && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'rgba(255,255,255,0.08)',
@@ -716,6 +1020,7 @@ export default function Game() {
               : `${players[currentPlayerIndex]?.name}'S TURN`}
           </span>
         </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -742,7 +1047,7 @@ export default function Game() {
         gridTemplateRows: 'auto 1fr auto',
         gridTemplateColumns: 'auto 1fr auto',
         gap: 12,
-        padding: '16px 20px',
+        padding: '56px 20px 16px',
         minHeight: 0,
       }}>
 
@@ -755,8 +1060,8 @@ export default function Game() {
             position="top"
             aiThinking={aiThinking && currentPlayerIndex === topIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === topIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
+            revealCard={getPowerRevealForPlayer(topIdx)}
+            powerSelectable={powerMode === 'peek_opponent' || powerMode === 'peek_swap_any' || powerMode === 'swap_opponents'}
             onPowerClick={(row, col) => handlePowerCardClick(topIdx, row, col)}
           />
         </div>
@@ -770,8 +1075,8 @@ export default function Game() {
             position="left"
             aiThinking={aiThinking && currentPlayerIndex === leftIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === leftIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
+            revealCard={getPowerRevealForPlayer(leftIdx)}
+            powerSelectable={powerMode === 'peek_opponent' || powerMode === 'peek_swap_any' || powerMode === 'swap_opponents'}
             onPowerClick={(row, col) => handlePowerCardClick(leftIdx, row, col)}
           />
         </div>
@@ -802,8 +1107,8 @@ export default function Game() {
             position="right"
             aiThinking={aiThinking && currentPlayerIndex === rightIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === rightIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
+            revealCard={getPowerRevealForPlayer(rightIdx)}
+            powerSelectable={powerMode === 'peek_opponent' || powerMode === 'peek_swap_any' || powerMode === 'swap_opponents'}
             onPowerClick={(row, col) => handlePowerCardClick(rightIdx, row, col)}
           />
         </div>
@@ -838,8 +1143,9 @@ export default function Game() {
               isYou={true}
               onCardClick={handleCardClick}
               selectedForSwap={swapMode}
-              revealCard={peekedCard?.playerIndex === bottomIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
-              powerSelectable={powerMode === 'peek_self'}
+              revealCard={getPowerRevealForPlayer(bottomIdx)}
+              powerSelectable={powerMode === 'peek_self' || powerMode === 'peek_swap_any'}
+              powerAllowSelfAny={powerMode === 'peek_swap_any'}
               onPowerClick={(row, col) => handlePowerCardClick(bottomIdx, row, col)}
             />
           </div>
@@ -848,7 +1154,15 @@ export default function Game() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {phase === 'swap' && isMyTurn && drawnCard && (
               <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="arcade-btn arcade-btn-blue" style={{ fontSize: 14, padding: '10px 20px' }} onClick={discardDrawn}>
-                {drawnCard.rank === '7' ? '👁 DISCARD + PEEK SELF' : drawnCard.rank === '8' ? '🕵️ DISCARD + SPY OPP' : '🗑 DISCARD DRAWN'}
+                {drawnCard.rank === '7'
+                    ? '👁 DISCARD + PEEK SELF'
+                  : drawnCard.rank === '8'
+                    ? '🕵️ DISCARD + SPY OPP'
+                    : drawnCard.rank === '9'
+                      ? '👀🔀 DISCARD + PEEK/SWAP'
+                    : drawnCard.rank === '10'
+                      ? '🔀 DISCARD + SWAP OPPONENTS'
+                      : '🗑 DISCARD DRAWN'}
               </motion.button>
             )}
             {!finalRound && isMyTurn && phase !== 'power' && (
@@ -859,6 +1173,16 @@ export default function Game() {
             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '8px 16px', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)', fontFamily: 'Nunito', textAlign: 'center' }}>
               {phase === 'power' && pendingPower === '7' && '👁 Tap one of your face-down cards to peek'}
               {phase === 'power' && pendingPower === '8' && "🕵️ Tap an opponent's card to spy on it"}
+              {phase === 'power' && pendingPower === '9' && (
+                swapPowerFirstTarget
+                  ? `👀🔀 Now tap a card from a different player than ${players[swapPowerFirstTarget.playerIndex]?.name}`
+                  : '👀🔀 Tap 1 card from any player, then tap a card from a different player'
+              )}
+              {phase === 'power' && pendingPower === '10' && (
+                swapPowerFirstTarget
+                  ? `🔀 Now tap a card from a different opponent than ${players[swapPowerFirstTarget.playerIndex]?.name}`
+                  : '🔀 Tap one card from an opponent, then tap a card from another opponent'
+              )}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '⬆ TAP A CARD TO SWAP'}
               {!isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}

@@ -56,7 +56,7 @@ function calcScore(cards: any[][]): number {
   for (let col = 0; col < 2; col++) {
     const top = cards[0]?.[col];
     const bot = cards[1]?.[col];
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
+    if (top?.faceUp && bot?.faceUp && top.value === bot.value && top.value >= 0) continue;
     if (top?.faceUp) total += top.value;
     if (bot?.faceUp) total += bot.value;
   }
@@ -112,7 +112,14 @@ function initGameState(roomPlayers: any[]): any {
     winner: null,
     pendingPower: null,
     lastPlayedCard: null,
+    lastPowerNotice: null,
+    lastPowerNoticeId: null,
   };
+}
+
+function setPowerNotice(state: any, message: string) {
+  state.lastPowerNotice = message;
+  state.lastPowerNoticeId = Date.now() + Math.floor(Math.random() * 1000);
 }
 
 function endGame(state: any): any {
@@ -137,6 +144,8 @@ function advanceTurn(state: any, fromIndex: number): any {
 
 function processAction(gameState: any, playerRealId: string, action: string, data: any): any {
   const state = JSON.parse(JSON.stringify(gameState));
+  if (state.lastPowerNoticeId === undefined) state.lastPowerNoticeId = null;
+  if (state.lastPowerNotice === undefined) state.lastPowerNotice = null;
   const slot = state.players.findIndex((p: any) => p.realPlayerId === playerRealId);
   if (slot === -1) { console.log(`Player ${playerRealId} not found`); return state; }
 
@@ -195,7 +204,17 @@ function processAction(gameState: any, playerRealId: string, action: string, dat
       state.lastPlayedCard = toDiscard;
       state.discardPile = [toDiscard, ...state.discardPile];
       state.drawnCard = null;
-      if (toDiscard.rank === '7' || toDiscard.rank === '8') {
+      if (toDiscard.rank === '7' || toDiscard.rank === '8' || toDiscard.rank === '9' || toDiscard.rank === '10') {
+        if (toDiscard.rank === '7') {
+          const selfCards = state.players[slot]?.cards || [];
+          const hasFaceDownCard = selfCards.some((row: any[]) => row.some((c: any) => c && !c.faceUp));
+          if (!hasFaceDownCard) {
+            return advanceTurn(state, slot);
+          }
+        }
+        if (toDiscard.rank === '10' && state.players.length < 3) {
+          return advanceTurn(state, slot);
+        }
         state.pendingPower = toDiscard.rank;
         state.phase = 'power';
       } else {
@@ -204,6 +223,47 @@ function processAction(gameState: any, playerRealId: string, action: string, dat
       break;
     }
     case 'use_power': {
+      const actorName = state.players[slot]?.name || 'Player';
+      if (state.pendingPower === '7' || state.pendingPower === '8') {
+        const t = data?.target;
+        const targetName = (Number.isInteger(t?.playerIndex) && state.players[t.playerIndex]?.name) || 'opponent';
+        setPowerNotice(
+          state,
+          state.pendingPower === '7'
+            ? `${actorName} peeked at their own card`
+            : `${actorName} peeked at ${targetName}'s card`
+        );
+      }
+      if (state.pendingPower === '9' || state.pendingPower === '10') {
+        const targets = Array.isArray(data?.targets) ? data.targets : null;
+        if (!targets || targets.length !== 2) break;
+        const [a, b] = targets;
+        const validIndex = (v: any) => Number.isInteger(v) && v >= 0 && v < state.players.length;
+        const validPos = (v: any) => Number.isInteger(v) && v >= 0 && v < 2;
+        const valid =
+          validIndex(a?.playerIndex) && validIndex(b?.playerIndex) &&
+          validPos(a?.row) && validPos(a?.col) &&
+          validPos(b?.row) && validPos(b?.col) &&
+          a.playerIndex !== b.playerIndex &&
+          (state.pendingPower === '9' ? true : (a.playerIndex !== slot && b.playerIndex !== slot));
+
+        if (!valid) break;
+
+        const cardA = state.players[a.playerIndex]?.cards?.[a.row]?.[a.col];
+        const cardB = state.players[b.playerIndex]?.cards?.[b.row]?.[b.col];
+        if (!cardA || !cardB) break;
+
+        state.players[a.playerIndex].cards[a.row][a.col] = cardB;
+        state.players[b.playerIndex].cards[b.row][b.col] = cardA;
+        const firstName = state.players[a.playerIndex]?.name || 'Player';
+        const secondName = state.players[b.playerIndex]?.name || 'Player';
+        setPowerNotice(
+          state,
+          state.pendingPower === '9'
+            ? `${actorName} peeked and swapped cards between ${firstName} and ${secondName}`
+            : `${actorName} swapped cards between ${firstName} and ${secondName}`
+        );
+      }
       state.pendingPower = null;
       return advanceTurn(state, slot);
     }

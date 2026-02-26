@@ -272,18 +272,36 @@ export default function EndGame() {
             >
               <button
                 className="arcade-btn arcade-btn-green"
-                style={{ fontSize: 18, padding: '16px 36px', fontWeight: 900 }}
+                style={{
+                  fontSize: 18,
+                  padding: '16px 36px',
+                  fontWeight: 900,
+                  display: 'inline-flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
                 onClick={handlePlayAgain}
               >
-                <RotateCcw size={18} style={{ marginRight: 8 }} />
+                <RotateCcw size={18} />
                 PLAY AGAIN
               </button>
               <button
                 className="arcade-btn arcade-btn-blue"
-                style={{ fontSize: 18, padding: '16px 36px', fontWeight: 900 }}
+                style={{
+                  fontSize: 18,
+                  padding: '16px 36px',
+                  fontWeight: 900,
+                  display: 'inline-flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
                 onClick={handleMenu}
               >
-                <Home size={18} style={{ marginRight: 8 }} />
+                <Home size={18} />
                 MAIN MENU
               </button>
             </motion.div>

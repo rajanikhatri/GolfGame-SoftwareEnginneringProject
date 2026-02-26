@@ -25,6 +25,11 @@ export interface ChatMessage {
   id: string; playerId: string; playerName: string; message: string; timestamp: Date;
 }
 
+export interface PowerNotice {
+  id: number;
+  message: string;
+}
+
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/server/make-server-278ab37f`;
 const AUTH_HEADERS = {
   'Content-Type': 'application/json',
@@ -44,7 +49,8 @@ interface GameContextType {
   matchWindowActive: boolean; matchCountdown: number;
   aiThinking: boolean; winner: Player | null;
   chatMessages: ChatMessage[]; lastPlayedCard: Card | null;
-  pendingPower: '7' | '8' | null;
+  pendingPower: '7' | '8' | '9' | '10' | null;
+  powerNotice: PowerNotice | null;
   // Multiplayer state
   roomCode: string | null; myPlayerId: string | null;
   mySlotIndex: number; isHost: boolean;
@@ -61,7 +67,7 @@ interface GameContextType {
   swapCard: (row: number, col: number) => void;
   discardDrawn: () => void;
   knock: () => void;
-  resolvePower: () => void;
+  resolvePower: (data?: any) => void;
   sendChat: (message: string) => void;
   addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   resetGame: () => void;
@@ -110,7 +116,7 @@ export function calcScore(cards: (Card | null)[][]): number {
   let total = 0;
   for (let col = 0; col < 2; col++) {
     const top = cards[0]?.[col]; const bot = cards[1]?.[col];
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
+    if (top?.faceUp && bot?.faceUp && top.value === bot.value && top.value >= 0) continue;
     if (top?.faceUp) total += top.value;
     if (bot?.faceUp) total += bot.value;
   }
@@ -146,7 +152,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [winner, setWinner] = useState<Player | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(LOBBY_MESSAGES);
   const [lastPlayedCard, setLastPlayedCard] = useState<Card | null>(null);
-  const [pendingPower, setPendingPower] = useState<'7' | '8' | null>(null);
+  const [pendingPower, setPendingPower] = useState<'7' | '8' | '9' | '10' | null>(null);
+  const [powerNotice, setPowerNotice] = useState<PowerNotice | null>(null);
 
   // Multiplayer state
   const [roomCode, setRoomCode] = useState<string | null>(() => sessionStorage.getItem('golf_room_code'));
@@ -166,12 +173,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const matchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const channelRef = useRef<any>(null);
   const supabaseRef = useRef<any>(null);
+  const powerNoticeSeqRef = useRef(0);
+  const lastAppliedPowerNoticeIdRef = useRef<number | null>(null);
 
   useEffect(() => { drawPileRef.current = drawPile; }, [drawPile]);
   useEffect(() => { discardPileRef.current = discardPile; }, [discardPile]);
   useEffect(() => { playersRef.current = players; }, [players]);
   useEffect(() => { finalRoundRef.current = finalRound; }, [finalRound]);
   useEffect(() => { knockedByRef.current = knockedBy; }, [knockedBy]);
+
+  const announcePowerNotice = useCallback((message: string) => {
+    powerNoticeSeqRef.current += 1;
+    const id = Date.now() + powerNoticeSeqRef.current;
+    lastAppliedPowerNoticeIdRef.current = id;
+    setPowerNotice({ id, message });
+    return id;
+  }, []);
 
   // Restore multiplayer session on mount
   useEffect(() => {
@@ -196,6 +213,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setWinner(gs.winner || null);
     setPendingPower(gs.pendingPower || null);
     setLastPlayedCard(gs.lastPlayedCard || null);
+    if (gs.lastPowerNotice && gs.lastPowerNoticeId && gs.lastPowerNoticeId !== lastAppliedPowerNoticeIdRef.current) {
+      lastAppliedPowerNoticeIdRef.current = gs.lastPowerNoticeId;
+      setPowerNotice({ id: gs.lastPowerNoticeId, message: gs.lastPowerNotice });
+    }
     if (gs.phase !== 'game_over') gameActiveRef.current = true;
   }, []);
 
@@ -318,56 +339,137 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     setAiThinking(true);
     const timer = setTimeout(() => {
-      setAiThinking(false);
-      let pile = [...drawPileRef.current];
-      if (pile.length === 0) {
-        const discards = [...discardPileRef.current];
-        const [keepTop, ...rest] = discards;
-        if (rest.length === 0) { advanceTurn(currentPlayerIndex, playersRef.current, finalRoundRef.current, knockedByRef.current); return; }
-        pile = shuffle(rest.map(c => ({ ...c, faceUp: false })));
-        setDiscardPile(keepTop ? [keepTop] : []);
-      }
-      const drawn = { ...pile[pile.length - 1], faceUp: true };
-      const newPile = pile.slice(0, pile.length - 1);
-      setDrawPile(newPile);
-
-      const currentPlayers = [...playersRef.current];
-      const player = { ...currentPlayers[currentPlayerIndex] };
-      const newCards = player.cards.map(r => r.map(c => c ? { ...c } : null));
-      let swapRow = -1, swapCol = -1, worstVal = drawn.value;
-
-      outer: for (let row = 0; row < 2; row++) {
-        for (let col = 0; col < 2; col++) {
-          const c = newCards[row][col];
-          if (c && !c.faceUp) { swapRow = row; swapCol = col; break outer; }
+      try {
+        setAiThinking(false);
+        let pile = [...drawPileRef.current];
+        if (pile.length === 0) {
+          const discards = [...discardPileRef.current];
+          const [keepTop, ...rest] = discards;
+          if (rest.length === 0) { advanceTurn(currentPlayerIndex, playersRef.current, finalRoundRef.current, knockedByRef.current); return; }
+          pile = shuffle(rest.map(c => ({ ...c, faceUp: false })));
+          setDiscardPile(keepTop ? [keepTop] : []);
         }
-      }
-      if (swapRow === -1) {
-        for (let row = 0; row < 2; row++) {
-          for (let col = 0; col < 2; col++) {
-            const c = newCards[row][col];
-            if (c?.faceUp && c.value > worstVal) { worstVal = c.value; swapRow = row; swapCol = col; }
+        const drawn = { ...pile[pile.length - 1], faceUp: true };
+        const newPile = pile.slice(0, pile.length - 1);
+        setDrawPile(newPile);
+
+        const currentPlayers = [...playersRef.current];
+        const player = { ...currentPlayers[currentPlayerIndex] };
+        const newCards = player.cards.map(r => r.map(c => c ? { ...c } : null));
+        let swapRow = -1, swapCol = -1, worstVal = drawn.value;
+        const selfHasFaceDown = newCards.some(row => row.some(c => c && !c.faceUp));
+        const usesDrawnPower =
+          (drawn.rank === '7' && selfHasFaceDown) ||
+          (drawn.rank === '8' && currentPlayers.length >= 2) ||
+          (drawn.rank === '9' && currentPlayers.length >= 2) ||
+          (drawn.rank === '10' && currentPlayers.length >= 3);
+
+        if (!usesDrawnPower) {
+          outer: for (let row = 0; row < 2; row++) {
+            for (let col = 0; col < 2; col++) {
+              const c = newCards[row][col];
+              if (c && !c.faceUp) { swapRow = row; swapCol = col; break outer; }
+            }
+          }
+          if (swapRow === -1) {
+            for (let row = 0; row < 2; row++) {
+              for (let col = 0; col < 2; col++) {
+                const c = newCards[row][col];
+                if (c?.faceUp && c.value > worstVal) { worstVal = c.value; swapRow = row; swapCol = col; }
+              }
+            }
           }
         }
+
+        let toDiscard: Card;
+        if (swapRow !== -1) {
+          const old = newCards[swapRow][swapCol];
+          newCards[swapRow][swapCol] = { ...drawn, faceUp: true };
+          toDiscard = old ? { ...old, faceUp: true } : drawn;
+        } else { toDiscard = drawn; }
+
+        player.cards = newCards;
+        currentPlayers[currentPlayerIndex] = player;
+        let playersForAdvance = currentPlayers;
+        setLastPlayedCard(toDiscard);
+        setDiscardPile(prev => [toDiscard, ...prev]);
+        const actorName = currentPlayers[currentPlayerIndex]?.name || 'Opponent';
+        const allTargetsForPlayer = (pi: number) => {
+          const result: { playerIndex: number; row: number; col: number }[] = [];
+          const cards = currentPlayers[pi]?.cards ?? [];
+          for (let row = 0; row < cards.length; row++) {
+            for (let col = 0; col < (cards[row]?.length ?? 0); col++) {
+              if (cards[row][col]) result.push({ playerIndex: pi, row, col });
+            }
+          }
+          return result;
+        };
+        const pickRandom = <T,>(arr: T[]): T | null => arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
+        const swapTargets = (a: { playerIndex: number; row: number; col: number }, b: { playerIndex: number; row: number; col: number }) => {
+          const updated = playersForAdvance.map(p => ({
+            ...p,
+            cards: p.cards.map(row => row.map(c => (c ? { ...c } : null))),
+          }));
+          const cardA = updated[a.playerIndex]?.cards?.[a.row]?.[a.col] ?? null;
+          const cardB = updated[b.playerIndex]?.cards?.[b.row]?.[b.col] ?? null;
+          if (!cardA || !cardB) return false;
+          updated[a.playerIndex].cards[a.row][a.col] = cardB;
+          updated[b.playerIndex].cards[b.row][b.col] = cardA;
+          playersForAdvance = updated;
+          return true;
+        };
+
+        if (usesDrawnPower && drawn.rank === '7') {
+          const ownFaceDownTargets = allTargetsForPlayer(currentPlayerIndex).filter(t => {
+            const c = currentPlayers[t.playerIndex]?.cards?.[t.row]?.[t.col];
+            return c && !c.faceUp;
+          });
+          if (ownFaceDownTargets.length > 0) {
+            pickRandom(ownFaceDownTargets);
+            announcePowerNotice(`${actorName} peeked at one of their own cards`);
+          }
+        } else if (usesDrawnPower && drawn.rank === '8') {
+          const opponentIndices = currentPlayers.map((_, idx) => idx).filter(idx => idx !== currentPlayerIndex);
+          const targetPlayerIndex = pickRandom(opponentIndices);
+          if (targetPlayerIndex !== null) {
+            const target = pickRandom(allTargetsForPlayer(targetPlayerIndex));
+            if (target) announcePowerNotice(`${actorName} peeked at ${currentPlayers[target.playerIndex]?.name}'s card`);
+          }
+        } else if (usesDrawnPower && drawn.rank === '9') {
+          const candidatePlayers = currentPlayers.map((_, idx) => idx);
+          const firstPlayer = pickRandom(candidatePlayers);
+          const secondPlayer = firstPlayer === null ? null : pickRandom(candidatePlayers.filter(idx => idx !== firstPlayer));
+          if (firstPlayer !== null && secondPlayer !== null) {
+            const a = pickRandom(allTargetsForPlayer(firstPlayer));
+            const b = pickRandom(allTargetsForPlayer(secondPlayer));
+            if (a && b && swapTargets(a, b)) {
+              announcePowerNotice(`${actorName} peeked and swapped cards between ${currentPlayers[firstPlayer]?.name} and ${currentPlayers[secondPlayer]?.name}`);
+            }
+          }
+        } else if (usesDrawnPower && drawn.rank === '10') {
+          const opponentIndices = currentPlayers.map((_, idx) => idx).filter(idx => idx !== currentPlayerIndex);
+          const firstPlayer = pickRandom(opponentIndices);
+          const secondPlayer = firstPlayer === null ? null : pickRandom(opponentIndices.filter(idx => idx !== firstPlayer));
+          if (firstPlayer !== null && secondPlayer !== null) {
+            const a = pickRandom(allTargetsForPlayer(firstPlayer));
+            const b = pickRandom(allTargetsForPlayer(secondPlayer));
+            if (a && b && swapTargets(a, b)) {
+              announcePowerNotice(`${actorName} swapped cards between ${currentPlayers[firstPlayer]?.name} and ${currentPlayers[secondPlayer]?.name}`);
+            }
+          }
+        }
+
+        setPlayers(playersForAdvance);
+        showMatchWindow(() => advanceTurn(currentPlayerIndex, playersForAdvance, finalRoundRef.current, knockedByRef.current));
+      } catch (err) {
+        console.error('AI turn error', err);
+        setAiThinking(false);
+        showMatchWindow(() => advanceTurn(currentPlayerIndex, playersRef.current, finalRoundRef.current, knockedByRef.current));
       }
-
-      let toDiscard: Card;
-      if (swapRow !== -1) {
-        const old = newCards[swapRow][swapCol];
-        newCards[swapRow][swapCol] = { ...drawn, faceUp: true };
-        toDiscard = old ? { ...old, faceUp: true } : drawn;
-      } else { toDiscard = drawn; }
-
-      player.cards = newCards;
-      currentPlayers[currentPlayerIndex] = player;
-      setPlayers(currentPlayers);
-      setLastPlayedCard(toDiscard);
-      setDiscardPile(prev => [toDiscard, ...prev]);
-      showMatchWindow(() => advanceTurn(currentPlayerIndex, currentPlayers, finalRoundRef.current, knockedByRef.current));
     }, 1200 + Math.random() * 1000);
 
     return () => clearTimeout(timer);
-  }, [currentPlayerIndex, phase, players, matchWindowActive, gameMode, showMatchWindow, advanceTurn]);
+  }, [currentPlayerIndex, phase, players, matchWindowActive, gameMode, showMatchWindow, advanceTurn, announcePowerNotice]);
 
   // ─── initGame (solo) ───────────────────────────────────────────────────────────
   const initGame = useCallback(() => {
@@ -391,7 +493,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPlayers(newPlayers); setDrawPile([...deck]); setDiscardPile([firstDiscard]);
     setCurrentPlayerIndex(0); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
-    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null);
+    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setPowerNotice(null);
   }, []);
 
   // ─── Multiplayer room actions ──────────────────────────────────────────────────
@@ -515,19 +617,71 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (phase !== 'swap' || !drawnCard || currentPlayerIndex !== 0) return;
     const toDiscard = { ...drawnCard, faceUp: true };
     setLastPlayedCard(toDiscard); setDiscardPile(prev => [toDiscard, ...prev]); setDrawnCard(null);
-    if (drawnCard.rank === '7' || drawnCard.rank === '8') {
-      setPendingPower(drawnCard.rank as '7' | '8'); setPhase('power'); return;
+    if (drawnCard.rank === '7' || drawnCard.rank === '8' || drawnCard.rank === '9' || drawnCard.rank === '10') {
+      if (drawnCard.rank === '7') {
+        const selfCards = playersRef.current[0]?.cards ?? [];
+        const hasFaceDownCard = selfCards.some((row) => row.some((c) => c && !c.faceUp));
+        if (!hasFaceDownCard) {
+          const currentPlayers = playersRef.current;
+          showMatchWindow(() => advanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
+          return;
+        }
+      }
+      if (drawnCard.rank === '10' && playersRef.current.length < 3) {
+        const currentPlayers = playersRef.current;
+        showMatchWindow(() => advanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
+        return;
+      }
+      setPendingPower(drawnCard.rank as '7' | '8' | '9' | '10'); setPhase('power'); return;
     }
     const currentPlayers = playersRef.current;
     showMatchWindow(() => advanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
   }, [gameMode, phase, drawnCard, currentPlayerIndex, showMatchWindow, advanceTurn, sendAction]);
 
-  const resolvePower = useCallback(() => {
-    if (gameMode === 'multiplayer') { sendAction('use_power'); return; }
+  const resolvePower = useCallback((data?: any) => {
+    if (gameMode === 'multiplayer') { sendAction('use_power', data); return; }
+    let playersForAdvance = playersRef.current;
+    if (typeof data?.notice === 'string' && data.notice.trim()) {
+      announcePowerNotice(data.notice.trim());
+    }
+    if (pendingPower === '9' || pendingPower === '10') {
+      let swapped = false;
+      const targets = Array.isArray(data?.targets) ? data.targets : null;
+      if (targets?.length === 2) {
+        const [a, b] = targets;
+        const validIndex = (v: any) => Number.isInteger(v) && v >= 0;
+        const validRowCol = (v: any) => Number.isInteger(v) && v >= 0 && v < 2;
+        const myIndex = 0;
+        const valid =
+          validIndex(a?.playerIndex) && validIndex(b?.playerIndex) &&
+          validRowCol(a?.row) && validRowCol(a?.col) &&
+          validRowCol(b?.row) && validRowCol(b?.col) &&
+          a.playerIndex !== b.playerIndex &&
+          (pendingPower === '9'
+            ? true
+            : (a.playerIndex !== myIndex && b.playerIndex !== myIndex));
+
+        if (valid) {
+          const updated = playersRef.current.map(p => ({
+            ...p,
+            cards: p.cards.map(row => row.map(c => (c ? { ...c } : null))),
+          }));
+          const cardA = updated[a.playerIndex]?.cards?.[a.row]?.[a.col] ?? null;
+          const cardB = updated[b.playerIndex]?.cards?.[b.row]?.[b.col] ?? null;
+          if (cardA && cardB) {
+            updated[a.playerIndex].cards[a.row][a.col] = cardB;
+            updated[b.playerIndex].cards[b.row][b.col] = cardA;
+            setPlayers(updated);
+            playersForAdvance = updated;
+            swapped = true;
+          }
+        }
+      }
+      if (!swapped) return;
+    }
     setPendingPower(null);
-    const currentPlayers = playersRef.current;
-    showMatchWindow(() => advanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
-  }, [gameMode, showMatchWindow, advanceTurn, sendAction]);
+    showMatchWindow(() => advanceTurn(0, playersForAdvance, finalRoundRef.current, knockedByRef.current));
+  }, [gameMode, pendingPower, showMatchWindow, advanceTurn, sendAction, announcePowerNotice]);
 
   const knock = useCallback(() => {
     if (gameMode === 'multiplayer') { sendAction('knock'); return; }
@@ -560,7 +714,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGameMode(null); setPlayers([]); setDrawPile([]); setDiscardPile([]);
     setCurrentPlayerIndex(0); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
-    setAiThinking(false); setWinner(null); setChatMessages(LOBBY_MESSAGES);
+    setAiThinking(false); setWinner(null); setChatMessages(LOBBY_MESSAGES); setPowerNotice(null);
     // Clear multiplayer session
     leaveRoom();
   }, [leaveRoom]);
@@ -570,7 +724,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       gameMode, setGameMode, players, setPlayers, drawPile, discardPile,
       currentPlayerIndex, drawnCard, phase, finalRound, knockedBy,
       matchWindowActive, matchCountdown, aiThinking, winner, chatMessages,
-      lastPlayedCard, pendingPower,
+      lastPlayedCard, pendingPower, powerNotice,
       roomCode, myPlayerId, mySlotIndex, isHost, roomPlayers, roomStatus,
       initGame, createRoom, joinRoom, leaveRoom, setPlayerReady, startMultiplayerGame,
       drawFromPile, takeFromDiscard, swapCard, discardDrawn, knock, resolvePower,
