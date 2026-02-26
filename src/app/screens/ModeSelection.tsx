@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, Zap, Trophy, Users, X, ArrowRight, LogIn } from 'lucide-react';
 import { useGame } from '../context/GameContext';
+import { usePlayerAuth } from '../auth/AuthContext';
 
 const AVATARS = ['🎮', '🦊', '🐼', '🦋', '🐉', '🦁', '🐯', '🦅'];
 
 export default function ModeSelection() {
   const navigate = useNavigate();
   const { setGameMode, createRoom, joinRoom } = useGame();
+  const { logout, profile } = usePlayerAuth();
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
   const [showMultiModal, setShowMultiModal] = useState(false);
   const [modalTab, setModalTab] = useState<'create' | 'join'>('create');
@@ -60,6 +62,56 @@ export default function ModeSelection() {
         fontFamily: 'Nunito, sans-serif',
       }}
     >
+      <button
+        type="button"
+        onClick={() => void logout()}
+        style={{
+          position: 'fixed',
+          top: 16,
+          left: 20,
+          zIndex: 40,
+          background: 'linear-gradient(180deg, #EF5350 0%, #D32F2F 100%)',
+          border: 'none',
+          borderRadius: 999,
+          padding: '10px 18px',
+          color: 'white',
+          fontSize: 12,
+          fontWeight: 900,
+          letterSpacing: '0.04em',
+          boxShadow: '0 8px 20px rgba(211,47,47,0.35)',
+          cursor: 'pointer',
+          fontFamily: 'Nunito, sans-serif',
+        }}
+      >
+        LOG OUT
+      </button>
+
+      {profile && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 16,
+            right: 20,
+            zIndex: 40,
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 999,
+            padding: '10px 14px',
+            color: 'white',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: 'Nunito, sans-serif',
+            maxWidth: 'min(48vw, 420px)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+          title={`${profile.displayName} • ${profile.email ?? 'signed in'}`}
+        >
+          {profile.displayName} • {profile.email ?? 'signed in'}
+        </div>
+      )}
+
       {/* Floating suit symbols */}
       {[
         { top: '5%', left: '3%', symbol: '♠', color: 'white' },

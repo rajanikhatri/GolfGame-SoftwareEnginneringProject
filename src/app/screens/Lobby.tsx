@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown, Link } from 'lucide-react';
 import { useGame } from '../context/GameContext';
@@ -14,9 +14,8 @@ const AI_MESSAGES = [
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const location = useLocation();
   const {
-    gameMode, initGame, chatMessages, sendChat, addChatMessage,
+    gameMode, initGame, chatMessages, sendChat,
     roomCode, myPlayerId, isHost, roomPlayers, roomStatus,
     setPlayerReady, startMultiplayerGame, leaveRoom,
   } = useGame();
@@ -32,7 +31,6 @@ export default function Lobby() {
     { id: 'p4', name: 'RILEY', avatar: '🦋', color: '#AB47BC', ready: false },
   ]);
   const chatEndRef = useRef<HTMLDivElement>(null);
-
   const isMultiplayer = gameMode === 'multiplayer';
   const shareUrl = roomCode ? `${window.location.origin}${window.location.pathname}?code=${roomCode}` : '';
 
@@ -40,11 +38,11 @@ export default function Lobby() {
   useEffect(() => {
     if (isMultiplayer) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p2' ? { ...p, ready: true } : p)); addChatMessage({ playerId: 'p2', playerName: 'ALEX', message: AI_MESSAGES[0] }); }, 1800));
-    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p3' ? { ...p, ready: true } : p)); addChatMessage({ playerId: 'p3', playerName: 'JAMIE', message: AI_MESSAGES[2] }); }, 3000));
-    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p4' ? { ...p, ready: true } : p)); addChatMessage({ playerId: 'p4', playerName: 'RILEY', message: AI_MESSAGES[3] }); }, 4000));
+    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p2' ? { ...p, ready: true } : p)); }, 1800));
+    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p3' ? { ...p, ready: true } : p)); }, 3000));
+    timers.push(setTimeout(() => { setSoloPlayers(prev => prev.map(p => p.id === 'p4' ? { ...p, ready: true } : p)); }, 4000));
     return () => timers.forEach(clearTimeout);
-  }, [isMultiplayer, addChatMessage]);
+  }, [isMultiplayer]);
 
   // Watch for game starting (multiplayer)
   useEffect(() => {
@@ -179,7 +177,7 @@ export default function Lobby() {
           )}
 
           {/* Player grid */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(isMultiplayer ? multiSlots : soloPlayers).map((player, i) => {
               if (!player) {
                 // Empty slot (multiplayer)
@@ -246,7 +244,8 @@ export default function Lobby() {
             })}
           </div>
 
-          {/* Rules */}
+          <div className="grid gap-5 lg:grid-cols-2 items-start">
+            {/* Rules */}
           <div style={{ background: 'rgba(255,193,7,0.08)', border: '2px solid rgba(255,193,7,0.2)', borderRadius: 16, padding: '16px 20px' }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#FFC107', fontFamily: 'Nunito', letterSpacing: '0.1em', marginBottom: 8 }}>⛳ HOW TO PLAY</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', fontFamily: 'Nunito', lineHeight: 1.8 }}>
@@ -258,7 +257,8 @@ export default function Lobby() {
             </div>
           </div>
 
-          {/* Ready toggle (multiplayer non-host) */}
+            <div className="flex flex-col justify-end gap-4">
+              {/* Ready toggle (multiplayer non-host) */}
           {isMultiplayer && !isHost && (
             <motion.button whileTap={{ scale: 0.96 }}
               className={`arcade-btn ${myReadyStatus ? 'arcade-btn-red' : 'arcade-btn-green'} py-4 w-full`}
@@ -286,9 +286,12 @@ export default function Lobby() {
               ⏳ Waiting for host to start the game...
             </div>
           )}
+            </div>
+          </div>
         </div>
 
         {/* Right: Chat */}
+        {false && (
         <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.4)', fontFamily: 'Nunito', letterSpacing: '0.2em' }}>💬 GAME CHAT</div>
           <div style={{ flex: 1, background: 'rgba(0,0,0,0.25)', border: '2px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', maxHeight: 'calc(100vh - 320px)', minHeight: 300 }}>
@@ -318,6 +321,7 @@ export default function Lobby() {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

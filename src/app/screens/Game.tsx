@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
+import { RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
 import { useGame, type Card, type Player } from '../context/GameContext';
 import { GameCard } from '../components/game/GameCard';
 
@@ -181,8 +181,10 @@ function PlayerCardGrid({
           {row.map((card, ci) => {
             const isPeeked = revealCard?.row === ri && revealCard?.col === ci;
 
-            // Opponents always face-down unless peeked; own cards based on faceUp
-            const faceDown = isYou ? !card?.faceUp : !isPeeked;
+            // Opponents are hidden unless peeked; own hidden cards also temporarily reveal when peeked.
+            const faceDown = isYou
+              ? (!card?.faceUp && !isPeeked)
+              : !isPeeked;
 
             // Power click targets:
             // - card 7 (peek self): own face-down cards only
@@ -823,11 +825,6 @@ export default function Game() {
                 <Star size={10} fill="#FFC107" color="#FFC107" style={{ marginRight: 4 }} />
                 <span style={{ fontSize: 12, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>{calcVisibleScore(pBottom)} pts</span>
               </div>
-              {swapMode && (
-                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'rgba(255,193,7,0.15)', border: '2px solid rgba(255,193,7,0.6)', borderRadius: 50, padding: '4px 14px', fontSize: 12, fontWeight: 800, color: '#FFC107', fontFamily: 'Nunito' }}>
-                  ⬆ TAP A CARD TO SWAP
-                </motion.div>
-              )}
               {powerMode === 'peek_self' && (
                 <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'rgba(30,136,229,0.2)', border: '2px solid rgba(66,165,245,0.7)', borderRadius: 50, padding: '4px 14px', fontSize: 12, fontWeight: 800, color: '#42A5F5', fontFamily: 'Nunito' }}>
                   👁 TAP A FACE-DOWN CARD
@@ -856,14 +853,14 @@ export default function Game() {
             )}
             {!finalRound && isMyTurn && phase !== 'power' && (
               <motion.button whileTap={{ scale: 0.95 }} className="arcade-btn arcade-btn-red" style={{ fontSize: 15, padding: '12px 24px' }} onClick={knock}>
-                <Flag size={16} style={{ marginRight: 6 }} /> KNOCK
+                KNOCK
               </motion.button>
             )}
             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '8px 16px', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)', fontFamily: 'Nunito', textAlign: 'center' }}>
               {phase === 'power' && pendingPower === '7' && '👁 Tap one of your face-down cards to peek'}
               {phase === 'power' && pendingPower === '8' && "🕵️ Tap an opponent's card to spy on it"}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && isMyTurn && '🔄 Swap with a card or discard'}
+              {phase === 'swap' && isMyTurn && '⬆ TAP A CARD TO SWAP'}
               {!isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>

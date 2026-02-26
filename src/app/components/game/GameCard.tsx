@@ -46,7 +46,7 @@ const SIZES = {
 
 export function GameCard({
   card,
-  faceDown = false,
+  faceDown,
   size = 'md',
   selected = false,
   selectable = false,
@@ -57,7 +57,9 @@ export function GameCard({
   rotated = false,
 }: GameCardProps) {
   const dims = SIZES[size];
-  const showBack = faceDown || !card?.faceUp;
+  // `faceDown` (when provided) should override the card's persisted faceUp state.
+  // This allows temporary reveals such as power-card peeks without mutating game state.
+  const showBack = typeof faceDown === 'boolean' ? faceDown : !card?.faceUp;
 
   const isRed = card?.suit === 'hearts' || card?.suit === 'diamonds';
   const isJoker = card?.suit === 'joker';
