@@ -2,7 +2,6 @@ import { createBrowserRouter, Outlet } from 'react-router';
 import { GameProvider } from './context/GameContext';
 import ModeSelection from './screens/ModeSelection';
 import Lobby from './screens/Lobby';
-import MultiplayerLobby from './screens/MultiplayerLobby';
 import Game from './screens/Game';
 import EndGame from './screens/EndGame';
 
@@ -21,7 +20,6 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: ModeSelection },
       { path: 'lobby', Component: Lobby },
-      { path: 'multiplayer-lobby', Component: MultiplayerLobby },
       { path: 'game', Component: Game },
       { path: 'end', Component: EndGame },
     ],

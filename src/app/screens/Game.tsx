@@ -353,7 +353,7 @@ function PlayerPanelComp({
 // ─── Draw / Discard Piles ─────────────────────────────────────────────────────
 function PileArea({
   drawPile, discardPile, drawnCard, phase, currentPlayerIndex,
-  onDraw, onTakeDiscard,
+  onDraw, onTakeDiscard, isMyTurn,
 }: {
   drawPile: Card[];
   discardPile: Card[];
@@ -362,9 +362,9 @@ function PileArea({
   currentPlayerIndex: number;
   onDraw: () => void;
   onTakeDiscard: () => void;
+  isMyTurn: boolean;
 }) {
-  const isPlayerTurn = currentPlayerIndex === 0;
-  const canDraw = isPlayerTurn && phase === 'draw';
+  const canDraw = isMyTurn && phase === 'draw';
   const discardTop = discardPile[0];
 
   return (
@@ -402,24 +402,6 @@ function PileArea({
             ))}
             <div style={{ position: 'relative', zIndex: 4 }}>
               <GameCard faceDown size="lg" glowing={canDraw} />
-            </div>
-            {canDraw && (
-              <div style={{
-                position: 'absolute', bottom: -28, left: '50%', transform: 'translateX(-50%)',
-                whiteSpace: 'nowrap',
-                fontSize: 10, fontWeight: 800, color: '#4CAF50',
-                fontFamily: 'Nunito', letterSpacing: '0.05em',
-                animation: 'pulse-glow 1.5s infinite',
-              }}>
-                ▲ DRAW CARD
-              </div>
-            )}
-            <div style={{
-              position: 'absolute', top: -24, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.4)', borderRadius: 50, padding: '2px 8px',
-              fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', whiteSpace: 'nowrap',
-            }}>
-              {drawPile.length > 0 ? `${drawPile.length} left` : '♾ reshuffling'}
             </div>
           </div>
         </div>
@@ -478,16 +460,6 @@ function PileArea({
                 </div>
               )}
             </div>
-            {canDraw && discardTop && (
-              <div style={{
-                position: 'absolute', bottom: -28, left: '50%', transform: 'translateX(-50%)',
-                whiteSpace: 'nowrap',
-                fontSize: 10, fontWeight: 800, color: '#FBC02D',
-                fontFamily: 'Nunito', letterSpacing: '0.05em',
-              }}>
-                ▲ TAKE CARD
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -534,6 +506,7 @@ export default function Game() {
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, knock,
     initGame, pendingPower, resolvePower,
+    gameMode, mySlotIndex,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -570,22 +543,17 @@ export default function Game() {
 
   // Auto-enable swap mode when player draws
   useEffect(() => {
-    setSwapMode(phase === 'swap' && currentPlayerIndex === 0);
-  }, [phase, currentPlayerIndex]);
-
-  // Clear peeked card when power resolves
-  useEffect(() => {
-    if (!pendingPower) {
-      setPeekedCard(null);
-    }
-  }, [pendingPower]);
+    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+    setSwapMode(phase === 'swap' && currentPlayerIndex === myIdx);
+  }, [phase, currentPlayerIndex, gameMode, mySlotIndex]);
 
   const handleCardClick = useCallback((row: number, col: number) => {
-    if (phase === 'swap' && currentPlayerIndex === 0) {
+    const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+    if (phase === 'swap' && currentPlayerIndex === myIdx) {
       swapCard(row, col);
       setSwapMode(false);
     }
-  }, [phase, currentPlayerIndex, swapCard]);
+  }, [phase, currentPlayerIndex, swapCard, gameMode, mySlotIndex]);
 
   // Called when player taps a card during power phase
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
@@ -604,10 +572,20 @@ export default function Game() {
 
   if (players.length === 0) return null;
 
-  const p1 = players[0];
-  const p2 = players[1];
-  const p3 = players[2];
-  const p4 = players[3];
+  // Rotate player layout so the local player is always at the bottom
+  const myIdx = gameMode === 'multiplayer' ? mySlotIndex : 0;
+  const numPlayers = players.length;
+  const bottomIdx = myIdx % numPlayers;
+  const leftIdx = (myIdx + 1) % numPlayers;
+  const topIdx = (myIdx + 2) % numPlayers;
+  const rightIdx = (myIdx + 3) % numPlayers;
+
+  const pBottom = players[bottomIdx];
+  const pLeft = players[leftIdx];
+  const pTop = players[topIdx];
+  const pRight = players[rightIdx];
+
+  const isMyTurn = currentPlayerIndex === myIdx;
 
   const calcVisibleScore = (p: Player) => {
     let total = 0;
@@ -766,33 +744,33 @@ export default function Game() {
         minHeight: 0,
       }}>
 
-        {/* Top player (P3) */}
+        {/* Top player */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
           <PlayerPanelComp
-            player={p3}
-            isActive={currentPlayerIndex === 2}
+            player={pTop}
+            isActive={currentPlayerIndex === topIdx}
             isYou={false}
             position="top"
-            aiThinking={aiThinking && currentPlayerIndex === 2}
+            aiThinking={aiThinking && currentPlayerIndex === topIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === 2 ? { row: peekedCard.row, col: peekedCard.col } : null}
+            revealCard={peekedCard?.playerIndex === topIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
             powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
+            onPowerClick={(row, col) => handlePowerCardClick(topIdx, row, col)}
           />
         </div>
 
-        {/* Left player (P2) */}
+        {/* Left player */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
           <PlayerPanelComp
-            player={p2}
-            isActive={currentPlayerIndex === 1}
+            player={pLeft}
+            isActive={currentPlayerIndex === leftIdx}
             isYou={false}
             position="left"
-            aiThinking={aiThinking && currentPlayerIndex === 1}
+            aiThinking={aiThinking && currentPlayerIndex === leftIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === 1 ? { row: peekedCard.row, col: peekedCard.col } : null}
+            revealCard={peekedCard?.playerIndex === leftIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
             powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+            onPowerClick={(row, col) => handlePowerCardClick(leftIdx, row, col)}
           />
         </div>
 
@@ -809,142 +787,84 @@ export default function Game() {
             currentPlayerIndex={currentPlayerIndex}
             onDraw={drawFromPile}
             onTakeDiscard={takeFromDiscard}
+            isMyTurn={isMyTurn}
           />
         </div>
 
-        {/* Right player (P4) */}
+        {/* Right player */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           <PlayerPanelComp
-            player={p4}
-            isActive={currentPlayerIndex === 3}
+            player={pRight}
+            isActive={currentPlayerIndex === rightIdx}
             isYou={false}
             position="right"
-            aiThinking={aiThinking && currentPlayerIndex === 3}
+            aiThinking={aiThinking && currentPlayerIndex === rightIdx}
             score="?"
-            revealCard={peekedCard?.playerIndex === 3 ? { row: peekedCard.row, col: peekedCard.col } : null}
+            revealCard={peekedCard?.playerIndex === rightIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
             powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
+            onPowerClick={(row, col) => handlePowerCardClick(rightIdx, row, col)}
           />
         </div>
 
-        {/* Bottom player (P1 - YOU) */}
+        {/* Bottom player — YOU */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          {/* Player hand */}
           <div style={{
-            background: currentPlayerIndex === 0
-              ? `linear-gradient(135deg, ${p1.color}20, ${p1.color}08)`
-              : 'rgba(255,255,255,0.04)',
-            border: currentPlayerIndex === 0 ? `2px solid ${p1.color}80` : '2px solid rgba(255,255,255,0.08)',
+            background: isMyTurn ? `linear-gradient(135deg, ${pBottom.color}20, ${pBottom.color}08)` : 'rgba(255,255,255,0.04)',
+            border: isMyTurn ? `2px solid ${pBottom.color}80` : '2px solid rgba(255,255,255,0.08)',
             borderRadius: 20, padding: '16px 24px',
-            boxShadow: currentPlayerIndex === 0 ? `0 0 30px ${p1.color}30` : 'none',
+            boxShadow: isMyTurn ? `0 0 30px ${pBottom.color}30` : 'none',
             transition: 'all 0.3s ease',
-            animation: currentPlayerIndex === 0 ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
+            animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
           }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
-            }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: '50%',
-                background: `radial-gradient(circle, ${p1.color}60, ${p1.color}20)`,
-                border: `2px solid ${p1.color}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, flexShrink: 0,
-              }}>{p1.avatar}</div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>
-                ★ YOU (PLAYER 1)
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: `radial-gradient(circle, ${pBottom.color}60, ${pBottom.color}20)`, border: `2px solid ${pBottom.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{pBottom.avatar}</div>
+              <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>★ {pBottom.name} (YOU)</span>
               <div className="score-badge" style={{ padding: '2px 10px' }}>
                 <Star size={10} fill="#FFC107" color="#FFC107" style={{ marginRight: 4 }} />
-                <span style={{ fontSize: 12, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>
-                  {calcVisibleScore(p1)} pts
-                </span>
+                <span style={{ fontSize: 12, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>{calcVisibleScore(pBottom)} pts</span>
               </div>
               {swapMode && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  style={{
-                    background: 'rgba(255,193,7,0.15)',
-                    border: '2px solid rgba(255,193,7,0.6)',
-                    borderRadius: 50, padding: '4px 14px',
-                    fontSize: 12, fontWeight: 800, color: '#FFC107',
-                    fontFamily: 'Nunito',
-                  }}
-                >
+                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'rgba(255,193,7,0.15)', border: '2px solid rgba(255,193,7,0.6)', borderRadius: 50, padding: '4px 14px', fontSize: 12, fontWeight: 800, color: '#FFC107', fontFamily: 'Nunito' }}>
                   ⬆ TAP A CARD TO SWAP
                 </motion.div>
               )}
               {powerMode === 'peek_self' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  style={{
-                    background: 'rgba(30,136,229,0.2)',
-                    border: '2px solid rgba(66,165,245,0.7)',
-                    borderRadius: 50, padding: '4px 14px',
-                    fontSize: 12, fontWeight: 800, color: '#42A5F5',
-                    fontFamily: 'Nunito',
-                  }}
-                >
+                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} style={{ background: 'rgba(30,136,229,0.2)', border: '2px solid rgba(66,165,245,0.7)', borderRadius: 50, padding: '4px 14px', fontSize: 12, fontWeight: 800, color: '#42A5F5', fontFamily: 'Nunito' }}>
                   👁 TAP A FACE-DOWN CARD
                 </motion.div>
               )}
             </div>
 
             <PlayerCardGrid
-              player={p1}
-              isActive={currentPlayerIndex === 0}
+              player={pBottom}
+              isActive={isMyTurn}
               isYou={true}
               onCardClick={handleCardClick}
               selectedForSwap={swapMode}
-              revealCard={peekedCard?.playerIndex === 0 ? { row: peekedCard.row, col: peekedCard.col } : null}
+              revealCard={peekedCard?.playerIndex === bottomIdx ? { row: peekedCard.row, col: peekedCard.col } : null}
               powerSelectable={powerMode === 'peek_self'}
-              onPowerClick={(row, col) => handlePowerCardClick(0, row, col)}
+              onPowerClick={(row, col) => handlePowerCardClick(bottomIdx, row, col)}
             />
           </div>
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {phase === 'swap' && currentPlayerIndex === 0 && drawnCard && (
-              <motion.button
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="arcade-btn arcade-btn-blue"
-                style={{ fontSize: 14, padding: '10px 20px' }}
-                onClick={discardDrawn}
-              >
-                {drawnCard.rank === '7'
-                  ? '👁 DISCARD + PEEK SELF'
-                  : drawnCard.rank === '8'
-                  ? '🕵️ DISCARD + SPY OPP'
-                  : '🗑 DISCARD DRAWN'}
+            {phase === 'swap' && isMyTurn && drawnCard && (
+              <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="arcade-btn arcade-btn-blue" style={{ fontSize: 14, padding: '10px 20px' }} onClick={discardDrawn}>
+                {drawnCard.rank === '7' ? '👁 DISCARD + PEEK SELF' : drawnCard.rank === '8' ? '🕵️ DISCARD + SPY OPP' : '🗑 DISCARD DRAWN'}
               </motion.button>
             )}
-
-            {!finalRound && currentPlayerIndex === 0 && phase !== 'power' && (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                className="arcade-btn arcade-btn-red"
-                style={{ fontSize: 15, padding: '12px 24px' }}
-                onClick={knock}
-              >
-                <Flag size={16} style={{ marginRight: 6 }} />
-                KNOCK
+            {!finalRound && isMyTurn && phase !== 'power' && (
+              <motion.button whileTap={{ scale: 0.95 }} className="arcade-btn arcade-btn-red" style={{ fontSize: 15, padding: '12px 24px' }} onClick={knock}>
+                <Flag size={16} style={{ marginRight: 6 }} /> KNOCK
               </motion.button>
             )}
-
-            <div style={{
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 12, padding: '8px 16px',
-              fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
-              fontFamily: 'Nunito', textAlign: 'center',
-            }}>
+            <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '8px 16px', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)', fontFamily: 'Nunito', textAlign: 'center' }}>
               {phase === 'power' && pendingPower === '7' && '👁 Tap one of your face-down cards to peek'}
-              {phase === 'power' && pendingPower === '8' && '🕵️ Tap an opponent\'s card to spy on it'}
-              {phase === 'draw' && currentPlayerIndex === 0 && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && currentPlayerIndex === 0 && '🔄 Swap with a card or discard'}
-              {currentPlayerIndex !== 0 && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
+              {phase === 'power' && pendingPower === '8' && "🕵️ Tap an opponent's card to spy on it"}
+              {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
+              {phase === 'swap' && isMyTurn && '🔄 Swap with a card or discard'}
+              {!isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>
         </div>
