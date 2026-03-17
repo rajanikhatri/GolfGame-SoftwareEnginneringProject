@@ -1,15 +1,24 @@
-<<<<<<< HEAD
+# Golf Game Software Engineering Project
 
-  # Multiplayer Card Game UI
+A browser-based Golf card game built with React, TypeScript, and Vite.
 
-  This is a code bundle for Multiplayer Card Game UI. The original project is available at https://www.figma.com/design/IIQ0NUrsa9mX14GWLceI5W/Multiplayer-Card-Game-UI.
+## Run locally
 
-  ## Running the code
+npm install
+npm run dev
 
-  Run `npm i` to install the dependencies.
+## Tech stack
 
-  Run `npm run dev` to start the development server.
-  
-=======
-# GolfGame-SoftwareEnginneringProject
->>>>>>> ab65e78b1f11b24271525552a284f108006a55fd
+- React
+- TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+
+## Project structure
+
+- `src/app/screens` = game screens
+- `src/app/context` = game state and logic
+- `src/app/components/game` = game specific UI
+- `src/app/components/ui`= reusable UI components
+- `src/styles`= styling files
