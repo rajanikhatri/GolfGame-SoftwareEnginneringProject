@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const COLORS = ['#E53935', '#FBC02D', '#43A047', '#1E88E5', '#AB47BC', '#FF7043', '#FFC107', '#26C6DA', '#EC407A'];
 
