@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn } from 'lucide-react';
+import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 
 // --- Types ---
@@ -128,6 +128,8 @@ export default function ModeSelection() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [joinPassword, setJoinPassword] = useState('');
   const [joinError, setJoinError] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
 
@@ -157,6 +159,8 @@ export default function ModeSelection() {
   // Step 2: refresh rooms (placeholder for Firebase)
   function handleRefreshRooms() {
     setRooms([...MOCK_ROOMS]);
+    setUpdateMsg('Updated!');
+    setTimeout(() => setUpdateMsg(''), 2000);
   }
 
   // Step 2: click a room to join
@@ -389,12 +393,15 @@ export default function ModeSelection() {
           <Modal onClose={closeModal}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <h2 style={{ fontSize: 26, fontWeight: 900 }}>Match list</h2>
-              <button
-                onClick={handleRefreshRooms}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#333', border: '1px solid #555', borderRadius: 6, color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Nunito' }}
-              >
-                <RefreshCw size={14} /> UPDATE
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {updateMsg && <span style={{ color: '#4caf50', fontSize: 13, fontWeight: 700 }}>{updateMsg}</span>}
+                <button
+                  onClick={handleRefreshRooms}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#333', border: '1px solid #555', borderRadius: 6, color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Nunito' }}
+                >
+                  <RefreshCw size={14} /> UPDATE
+                </button>
+              </div>
             </div>
             <input
               style={{ ...inputStyle, marginBottom: 12 }}
@@ -496,26 +503,32 @@ export default function ModeSelection() {
               waiting for players in room:<br />
               <span style={{ color: '#82B1FF' }}>{roomNameInput}</span>
             </h2>
-            <div style={{ background: '#2a2a2a', border: '1px solid #444', borderRadius: 6, padding: '10px 14px', marginBottom: 8, fontSize: 15 }}>
-              {nickname}
+            <div style={{ background: '#2a2a2a', border: '1px solid #444', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 15 }}>
+              {nickname} <span style={{ color: '#FFC107', fontSize: 12, marginLeft: 8 }}>(host)</span>
             </div>
-            <div style={{ background: '#2a2a2a', border: '1px solid #444', borderRadius: 6, padding: '10px 14px', marginBottom: 16, minHeight: 40 }} />
             <p style={{ fontSize: 12, color: '#aaa', fontStyle: 'italic', marginBottom: 16 }}>
               This room can contain max {maxPlayers} players
             </p>
+            <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Room Code — share this with your friends:</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
               <input
                 readOnly
-                value={`${window.location.origin}/lobby?room=${createdRoomCode}`}
-                style={{ ...inputStyle, fontSize: 12, color: '#555' }}
+                value={createdRoomCode}
+                style={{ ...inputStyle, fontSize: 18, fontWeight: 900, letterSpacing: '0.1em', textAlign: 'center' }}
               />
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdRoomCode); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
+                style={{ background: codeCopied ? '#2e7d32' : '#333', border: '1px solid #555', borderRadius: 6, color: 'white', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}
+              >
+                {codeCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <DarkBtn onClick={() => setStep('room-list')} style={{ minWidth: 100 }}>BACK</DarkBtn>
               <DarkBtn
                 onClick={handleStartGame}
                 style={{ minWidth: 100, background: '#1565C0', border: '2px solid #1976D2' }}
-              >INVITE & START</DarkBtn>
+              >START GAME</DarkBtn>
             </div>
           </Modal>
         )}
