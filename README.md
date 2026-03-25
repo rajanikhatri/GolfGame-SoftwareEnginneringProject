@@ -1,4 +1,4 @@
-# Golf Card Game — Multiplayer Edition
+# Golf Card Game - Multiplayer Edition
 
 A web-based multiplayer card game built for CS 440 Software Engineering (Spring 2026).
 Players compete to achieve the lowest cumulative score using memory, strategy, and power cards.
@@ -77,19 +77,6 @@ requirements.txt        # List of all packages and install instructions
 - Power cards (7/8/9/10) activate special abilities when drawn
 - Any player can **Knock** to trigger the final round
 
----
-
-## Branches
-
-| Branch | Owner | Responsibility |
-|---|---|---|
-| `main` | All | Stable merged code |
-| `Backend-Rajani` | Rajani | Firebase backend, room logic |
-| `Backend-Mandeep` | Mandeep | Backend support |
-| `FrontEnd-Rita` | Rita | Frontend UI |
-| `DataBase-Priyanka` | Priyanka | Database structure |
-| `DataBase-Sushant` | Sushant | Database support |
-| `nitish` | Nitish | Auth, Firebase setup |
 
 ---
 
