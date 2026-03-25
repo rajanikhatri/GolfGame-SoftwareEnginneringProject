@@ -30,11 +30,8 @@ const INITIAL_PLAYERS: LobbyPlayer[] = [
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const { gameMode, playerName, initGame, chatMessages, sendChat, addChatMessage } = useGame();
-  const initialPlayers: LobbyPlayer[] = gameMode === 'multiplayer'
-    ? [{ id: 'p1', name: playerName || 'YOU', avatar: '🎮', color: '#1E88E5', ready: true, isYou: true }]
-    : INITIAL_PLAYERS.map(p => p.isYou ? { ...p, name: playerName || 'YOU' } : p);
-  const [players, setPlayers] = useState<LobbyPlayer[]>(initialPlayers);
+  const { gameMode, initGame, chatMessages, sendChat, addChatMessage } = useGame();
+  const [players, setPlayers] = useState<LobbyPlayer[]>(INITIAL_PLAYERS);
   const [inputMsg, setInputMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
