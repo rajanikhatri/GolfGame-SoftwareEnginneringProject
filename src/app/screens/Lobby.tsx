@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
 import { useGame } from '../context/GameContext';
+import { subscribeToRoom, type FirebaseRoomDoc } from '../multiplayer/firebaseRooms';
 
 const AI_MESSAGES = [
   "Can't wait to destroy you all 😈",
@@ -28,9 +29,12 @@ const INITIAL_PLAYERS: LobbyPlayer[] = [
   { id: 'p4', name: 'RILEY', avatar: '🦋', color: '#AB47BC', ready: false },
 ];
 
+const PLAYER_COLORS = ['#1E88E5', '#E53935', '#43A047', '#AB47BC'];
+const PLAYER_AVATARS = ['🎮', '🦊', '🐼', '🦋'];
+
 export default function Lobby() {
   const navigate = useNavigate();
-  const { gameMode, playerName, initGame, chatMessages, sendChat, addChatMessage } = useGame();
+  const { gameMode, playerName, roomCode, initGame, chatMessages, sendChat, addChatMessage } = useGame();
   const initialPlayers: LobbyPlayer[] = gameMode === 'multiplayer'
     ? [{ id: 'p1', name: playerName || 'YOU', avatar: '🎮', color: '#1E88E5', ready: true, isYou: true }]
     : INITIAL_PLAYERS.map(p => p.isYou ? { ...p, name: playerName || 'YOU' } : p);
@@ -39,44 +43,56 @@ export default function Lobby() {
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const ROOM_CODE = 'GOLF-4821';
+  const ROOM_CODE = roomCode || 'GOLF-0000';
 
-  // Simulate players joining and getting ready
+  // Real-time Firebase listener for multiplayer
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (gameMode !== 'multiplayer' || !roomCode) return;
 
-    timers.push(setTimeout(() => {
-      setPlayers(prev => prev.map(p => p.id === 'p2' ? { ...p, ready: false } : p));
-      addChatMessage({ playerId: 'p2', playerName: 'ALEX', message: '✅ Joined the room!' });
-    }, 800));
+    const unsub = subscribeToRoom(roomCode, (room: FirebaseRoomDoc | null) => {
+      if (!room) return;
+      const updatedPlayers: LobbyPlayer[] = room.players.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        avatar: PLAYER_AVATARS[i] ?? '🎮',
+        color: PLAYER_COLORS[i] ?? '#1E88E5',
+        ready: p.ready,
+        isYou: p.name === playerName,
+      }));
+      setPlayers(updatedPlayers);
+      // Add chat message when new player joins
+      const prev = updatedPlayers.length;
+      if (prev > 1) {
+        const newest = room.players[room.players.length - 1];
+        addChatMessage({ playerId: newest.id, playerName: newest.name, message: '✅ Joined the room!' });
+      }
+    });
+
+    return () => unsub();
+  }, [gameMode, roomCode, playerName, addChatMessage]);
+
+  // AI simulation for solo mode only
+  useEffect(() => {
+    if (gameMode !== 'solo') return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
     timers.push(setTimeout(() => {
       setPlayers(prev => prev.map(p => p.id === 'p2' ? { ...p, ready: true } : p));
       addChatMessage({ playerId: 'p2', playerName: 'ALEX', message: AI_MESSAGES[0] });
-    }, 2200));
-
-    timers.push(setTimeout(() => {
-      setPlayers(prev => prev.map(p => p.id === 'p3' ? { ...p, ready: false } : p));
-      addChatMessage({ playerId: 'p3', playerName: 'JAMIE', message: '✅ Joined the room!' });
-    }, 1500));
+    }, 1000));
 
     timers.push(setTimeout(() => {
       setPlayers(prev => prev.map(p => p.id === 'p3' ? { ...p, ready: true } : p));
       addChatMessage({ playerId: 'p3', playerName: 'JAMIE', message: AI_MESSAGES[2] });
-    }, 3000));
-
-    timers.push(setTimeout(() => {
-      setPlayers(prev => prev.map(p => p.id === 'p4' ? { ...p, ready: false } : p));
-      addChatMessage({ playerId: 'p4', playerName: 'RILEY', message: '✅ Joined the room!' });
-    }, 2500));
+    }, 2000));
 
     timers.push(setTimeout(() => {
       setPlayers(prev => prev.map(p => p.id === 'p4' ? { ...p, ready: true } : p));
       addChatMessage({ playerId: 'p4', playerName: 'RILEY', message: AI_MESSAGES[3] });
-    }, 3800));
+    }, 3000));
 
     return () => timers.forEach(clearTimeout);
-  }, [addChatMessage]);
+  }, [gameMode, addChatMessage]);
 
   // Scroll chat to bottom
   useEffect(() => {

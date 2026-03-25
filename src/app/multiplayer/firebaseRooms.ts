@@ -3,10 +3,13 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
+  query,
   runTransaction,
   setDoc,
   type Unsubscribe,
+  where,
 } from 'firebase/firestore';
 import { ensureAnonymousUser, firebaseDb } from './firebase';
 
@@ -30,6 +33,9 @@ export interface FirebaseRoomDoc {
   players: FirebaseRoomPlayer[];
   createdAt: number;
   updatedAt: number;
+  roomName?: string;
+  maxPlayers?: number;
+  password?: string;
 }
 
 export interface MultiplayerProfileInput {
@@ -53,7 +59,17 @@ export function generateRoomCode() {
   return `GOLF-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-export async function createRoomWithRetries(profile: MultiplayerProfileInput, retries = 10) {
+export async function getWaitingRooms(): Promise<FirebaseRoomDoc[]> {
+  const q = query(roomsCol, where('status', '==', 'waiting'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data() as FirebaseRoomDoc);
+}
+
+export async function createRoomWithRetries(
+  profile: MultiplayerProfileInput,
+  options: { roomName?: string; maxPlayers?: number; password?: string } = {},
+  retries = 10,
+) {
   const user = await ensureAnonymousUser();
 
   for (let i = 0; i < retries; i++) {
@@ -82,6 +98,9 @@ export async function createRoomWithRetries(profile: MultiplayerProfileInput, re
           players: [host],
           createdAt: now,
           updatedAt: now,
+          roomName: options.roomName ?? `${profile.name}'s room`,
+          maxPlayers: options.maxPlayers ?? 4,
+          password: options.password ?? '',
         } satisfies FirebaseRoomDoc);
       });
       return { code, playerId: user.uid };

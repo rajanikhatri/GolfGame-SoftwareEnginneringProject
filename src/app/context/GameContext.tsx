@@ -37,6 +37,8 @@ interface GameContextType {
   setGameMode: (mode: 'multiplayer' | 'solo') => void;
   playerName: string;
   setPlayerName: (name: string) => void;
+  roomCode: string;
+  setRoomCode: (code: string) => void;
   players: Player[];
   setPlayers: React.Dispatch<React.SetStateAction<Player[]>>;
   drawPile: Card[];
@@ -141,6 +143,7 @@ const LOBBY_MESSAGES: ChatMessage[] = [
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [gameMode, setGameMode] = useState<'multiplayer' | 'solo' | null>(null);
   const [playerName, setPlayerName] = useState<string>('');
+  const [roomCode, setRoomCode] = useState<string>('');
   const [players, setPlayers] = useState<Player[]>([]);
   const [drawPile, setDrawPile] = useState<Card[]>([]);
   const [discardPile, setDiscardPile] = useState<Card[]>([]);
@@ -465,6 +468,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <GameContext.Provider value={{
       gameMode, setGameMode,
       playerName, setPlayerName,
+      roomCode, setRoomCode,
       players, setPlayers,
       drawPile, discardPile,
       currentPlayerIndex, drawnCard, phase,

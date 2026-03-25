@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
 import { useGame } from '../context/GameContext';
+import { usePlayerAuth } from '../auth/AuthContext';
+import {
+  createRoomWithRetries,
+  getWaitingRooms,
+  joinRoomByCode,
+  type FirebaseRoomDoc,
+} from '../multiplayer/firebaseRooms';
 
 // --- Types ---
 type ModalStep = 'nickname' | 'room-list' | 'create-room' | 'waiting-room' | 'room-password' | null;
@@ -13,14 +20,6 @@ interface Room {
   current: number;
   max: number;
   hasPassword: boolean;
-}
-
-// --- Mock rooms (replace with Firebase fetch later) ---
-const MOCK_ROOMS: Room[] = [];
-
-// --- Helpers ---
-function generateRoomCode() {
-  return 'GOLF-' + Math.floor(1000 + Math.random() * 9000);
 }
 
 // --- Floating background card ---
@@ -110,13 +109,16 @@ function DarkBtn({ onClick, children, style }: { onClick: () => void; children: 
 // =====================================================================
 export default function ModeSelection() {
   const navigate = useNavigate();
-  const { setGameMode, setPlayerName } = useGame();
+  const { setGameMode, setPlayerName, setRoomCode } = useGame();
+  const { profile } = usePlayerAuth();
 
   // Modal state
   const [step, setStep] = useState<ModalStep>(null);
   const [nickname, setNickname] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [rooms, setRooms] = useState<Room[]>(MOCK_ROOMS);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Create room state
   const [roomNameInput, setRoomNameInput] = useState('');
@@ -132,6 +134,31 @@ export default function ModeSelection() {
   const [updateMsg, setUpdateMsg] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
+
+  function toRoomList(docs: FirebaseRoomDoc[]): Room[] {
+    return docs.map(d => ({
+      id: d.code,
+      name: d.roomName ?? `${d.players[0]?.name ?? 'Unknown'}'s room`,
+      current: d.players.length,
+      max: d.maxPlayers ?? 4,
+      hasPassword: !!d.password,
+    }));
+  }
+
+  async function fetchRooms() {
+    setLoading(true);
+    setError('');
+    try {
+      const docs = await getWaitingRooms();
+      setRooms(toRoomList(docs));
+      setUpdateMsg('Updated!');
+      setTimeout(() => setUpdateMsg(''), 2000);
+    } catch (e) {
+      setError('Failed to load rooms.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function closeModal() {
     setStep(null);
@@ -154,18 +181,17 @@ export default function ModeSelection() {
     if (!nickname.trim()) return;
     setRoomNameInput(`${nickname.trim()}'s room`);
     setStep('room-list');
+    fetchRooms();
   }
 
-  // Step 2: refresh rooms (placeholder for Firebase)
+  // Step 2: refresh rooms from Firebase
   function handleRefreshRooms() {
-    setRooms([...MOCK_ROOMS]);
-    setUpdateMsg('Updated!');
-    setTimeout(() => setUpdateMsg(''), 2000);
+    fetchRooms();
   }
 
   // Step 2: click a room to join
   function handleRoomClick(room: Room) {
-    if (room.current >= room.max) return; // full
+    if (room.current >= room.max) return;
     setSelectedRoom(room);
     if (room.hasPassword) {
       setJoinPassword('');
@@ -176,42 +202,58 @@ export default function ModeSelection() {
     }
   }
 
-  function joinRoom(room: Room, password: string) {
-    // TODO: verify password against Firebase
-    setPlayerName(nickname.trim());
-    setGameMode('multiplayer');
-    navigate('/lobby');
+  async function joinRoom(room: Room, _password: string) {
+    setLoading(true);
+    setError('');
+    try {
+      const name = nickname.trim();
+      await joinRoomByCode(room.id, {
+        name,
+        avatar: '🎮',
+        color: '#1E88E5',
+        glowColor: 'rgba(30,136,229,0.7)',
+      });
+      setPlayerName(name);
+      setRoomCode(room.id);
+      setGameMode('multiplayer');
+      navigate('/lobby');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to join room.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Password submit for private room
-  function handlePasswordOk() {
+  async function handlePasswordOk() {
     if (!selectedRoom) return;
-    if (joinPassword !== selectedRoom.hasPassword.toString()) {
-      // In real app: verify against Firebase. For now just proceed.
-    }
-    joinRoom(selectedRoom, joinPassword);
+    await joinRoom(selectedRoom, joinPassword);
   }
 
-  // Step 3: create room
-  function handleCreateRoom() {
+  // Step 3: create room in Firebase
+  async function handleCreateRoom() {
     if (!roomNameInput.trim()) return;
-    const code = generateRoomCode();
-    setCreatedRoomCode(code);
-    // Add to local room list (Firebase would handle this)
-    const newRoom: Room = {
-      id: code,
-      name: roomNameInput.trim(),
-      current: 1,
-      max: maxPlayers,
-      hasPassword: roomPassword.length > 0,
-    };
-    setRooms(prev => [...prev, newRoom]);
-    setPlayerName(nickname.trim());
-    setGameMode('multiplayer');
-    setStep('waiting-room');
+    setLoading(true);
+    setError('');
+    try {
+      const name = nickname.trim();
+      const { code } = await createRoomWithRetries(
+        { name, avatar: '🎮', color: '#1E88E5', glowColor: 'rgba(30,136,229,0.7)' },
+        { roomName: roomNameInput.trim(), maxPlayers, password: roomPassword },
+      );
+      setCreatedRoomCode(code);
+      setPlayerName(name);
+      setRoomCode(code);
+      setGameMode('multiplayer');
+      setStep('waiting-room');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create room.');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // Step 4: start game from waiting room
+  // Step 4: navigate to lobby
   function handleStartGame() {
     navigate('/lobby');
   }
@@ -410,7 +452,15 @@ export default function ModeSelection() {
               onChange={e => setSearchQuery(e.target.value)}
             />
             <div style={{ border: '1px solid #444', borderRadius: 8, overflow: 'hidden', marginBottom: 20, maxHeight: 320, overflowY: 'auto' }}>
-              {filteredRooms.length === 0 ? (
+              {loading ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#888', fontSize: 14 }}>
+                  Loading rooms...
+                </div>
+              ) : error ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#e53935', fontSize: 14 }}>
+                  {error}
+                </div>
+              ) : filteredRooms.length === 0 ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: '#888', fontSize: 14 }}>
                   No rooms available. Be the first to create one!
                 </div>
