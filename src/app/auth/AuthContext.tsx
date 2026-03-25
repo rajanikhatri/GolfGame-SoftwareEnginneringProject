@@ -7,7 +7,7 @@ import {
   onFirebaseAuthChanged,
   registerWithEmail,
   type PlayerAccountProfile,
-} from '../multiplayer/firebase';
+} from '../database/firebase';
 
 interface AuthContextType {
   user: User | null;

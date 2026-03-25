@@ -1,0 +1,28 @@
+# Golf Card Game - Dependencies
+# Run: npm install
+# This file lists all packages required for the project.
+# Node.js projects use package.json for dependency management.
+# All packages below are installed automatically via: npm install
+
+# ── Runtime Dependencies ────────────────────────────────────────────────────
+firebase                  # Firebase Auth + Firestore (database & auth)
+lucide-react              # Icon library
+motion                    # Animations (motion/react)
+react                     # Core React library
+react-dom                 # React DOM rendering
+react-router              # Client-side routing
+tw-animate-css            # Tailwind animation utilities
+
+# ── Dev Dependencies ────────────────────────────────────────────────────────
+@tailwindcss/vite         # Tailwind CSS Vite plugin
+@types/react              # TypeScript types for React
+@types/react-dom          # TypeScript types for React DOM
+@vitejs/plugin-react      # React plugin for Vite
+tailwindcss               # Utility-first CSS framework
+vite                      # Build tool and dev server
+
+# ── How to install ──────────────────────────────────────────────────────────
+# 1. Make sure Node.js is installed (https://nodejs.org)
+# 2. Run: npm install
+# 3. Run: npm run dev   (to start development server)
+# 4. Run: npm run build (to build for production)

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Star, RotateCcw, Home } from 'lucide-react';
-import { useGame } from '../context/GameContext';
+import { useGame } from '../../backend/GameContext';
 import { GameCard } from '../components/game/GameCard';
 import { Confetti } from '../components/game/Confetti';
 

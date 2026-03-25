@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
-import { useGame } from '../context/GameContext';
-import { subscribeToRoom, type FirebaseRoomDoc } from '../multiplayer/firebaseRooms';
+import { useGame } from '../../backend/GameContext';
+import { subscribeToRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
 
 const AI_MESSAGES = [
   "Can't wait to destroy you all 😈",

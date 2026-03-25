@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
-import { useGame } from '../context/GameContext';
-import { usePlayerAuth } from '../auth/AuthContext';
+import { useGame } from '../../backend/GameContext';
+import { usePlayerAuth } from '../../auth/AuthContext';
 import {
   createRoomWithRetries,
   getWaitingRooms,
   joinRoomByCode,
   type FirebaseRoomDoc,
-} from '../multiplayer/firebaseRooms';
+} from '../../database/firebaseRooms';
 
 // --- Types ---
 type ModalStep = 'nickname' | 'room-list' | 'create-room' | 'waiting-room' | 'room-password' | null;

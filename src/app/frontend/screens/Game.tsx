@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
-import { useGame, type Card, type Player } from '../context/GameContext';
+import { useGame, type Card, type Player } from '../../backend/GameContext';
 import { GameCard } from '../components/game/GameCard';
 
 // ─── Match Banner ────────────────────────────────────────────────────────────

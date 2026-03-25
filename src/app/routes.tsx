@@ -1,9 +1,9 @@
 import { createBrowserRouter, Outlet } from 'react-router';
-import { GameProvider } from './context/GameContext';
-import ModeSelection from './screens/ModeSelection';
-import Lobby from './screens/Lobby';
-import Game from './screens/Game';
-import EndGame from './screens/EndGame';
+import { GameProvider } from './backend/GameContext';
+import ModeSelection from './frontend/screens/ModeSelection';
+import Lobby from './frontend/screens/Lobby';
+import Game from './frontend/screens/Game';
+import EndGame from './frontend/screens/EndGame';
 
 function Root() {
   return (

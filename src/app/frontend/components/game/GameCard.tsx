@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Card } from '../../context/GameContext';
+import type { Card } from '../../../backend/GameContext';
 
 interface GameCardProps {
   card?: Card | null;
