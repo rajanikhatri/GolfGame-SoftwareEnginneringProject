@@ -49,12 +49,11 @@ export function buildInitialGameState(
     name: p.name,
   }));
 
-  const playerHands = configs.map((cfg, i) => {
+  const playerHands = configs.map((cfg) => {
     const cards: (Card | null)[] = [];
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 2; col++) {
         const card = deck.pop()!;
-        if (i === 0 && row === 1) card.faceUp = true;
         cards.push(card);
       }
     }
@@ -352,10 +351,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       for (let row = 0; row < 2; row++) {
         for (let col = 0; col < 2; col++) {
           const card = deck.pop()!;
-          // Player 1 peeks their 2 bottom cards
-          if (i === 0 && row === 1) {
-            card.faceUp = true;
-          }
           cards[row].push(card);
         }
       }

@@ -163,7 +163,7 @@ function AIThinkingDots() {
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
-  revealCard, powerSelectable, onPowerClick,
+  revealCard, powerSelectable, onPowerClick, peekPhase,
 }: {
   player: Player;
   isActive: boolean;
@@ -172,6 +172,7 @@ function PlayerCardGrid({
   selectedForSwap?: boolean;
   revealCard?: { row: number; col: number } | null;
   powerSelectable?: boolean;
+  peekPhase?: boolean;
   onPowerClick?: (row: number, col: number) => void;
 }) {
   return (
@@ -180,9 +181,11 @@ function PlayerCardGrid({
         <div key={ri} style={{ display: 'flex', gap: 6 }}>
           {row.map((card, ci) => {
             const isPeeked = revealCard?.row === ri && revealCard?.col === ci;
+            const isPeekRow = peekPhase && isYou && ri === 1;
 
-            // Opponents always face-down unless peeked; own cards based on faceUp
-            const faceDown = isYou ? !card?.faceUp : !isPeeked;
+            // During peek phase bottom row: show card face-up by overriding faceUp
+            const displayCard = (isPeekRow && card) ? { ...card, faceUp: true } : card;
+            const faceDown = isYou ? !displayCard?.faceUp : !isPeeked;
 
             // Power click targets:
             // - card 7 (peek self): own face-down cards only
@@ -202,7 +205,7 @@ function PlayerCardGrid({
             return (
               <div key={ci} style={{ position: 'relative' }} onClick={handleClick}>
                 <GameCard
-                  card={card ?? undefined}
+                  card={displayCard ?? undefined}
                   faceDown={faceDown}
                   size={isYou ? 'md' : 'sm'}
                   selectable={(isYou && selectedForSwap) || isPowerTarget}
@@ -538,6 +541,15 @@ export default function Game() {
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
   const [swapMode, setSwapMode] = useState(false);
+  const [peekTimeLeft, setPeekTimeLeft] = useState(5);
+  const [peekActive, setPeekActive] = useState(true);
+
+  useEffect(() => {
+    if (!peekActive) return;
+    if (peekTimeLeft === 0) { setPeekActive(false); return; }
+    const t = setTimeout(() => setPeekTimeLeft(p => p - 1), 1000);
+    return () => clearTimeout(t);
+  }, [peekTimeLeft, peekActive]);
 
   // Peeked card: { playerIndex, row, col }
   const [peekedCard, setPeekedCard] = useState<{
@@ -673,6 +685,38 @@ export default function Game() {
             />
             <FinalRoundBanner knockerName={players.find(p => p.id === knockedBy)?.name || 'Someone'} />
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Peek phase overlay */}
+      <AnimatePresence>
+        {peekActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, zIndex: 95,
+              display: 'flex', justifyContent: 'center',
+              paddingTop: 16,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, #1565C0, #42A5F5)',
+              borderRadius: 20, padding: '16px 32px',
+              textAlign: 'center',
+              boxShadow: '0 8px 32px rgba(30,136,229,0.6)',
+            }}>
+              <div style={{ fontSize: 28, fontWeight: 900, color: 'white', fontFamily: 'Nunito' }}>
+                👁 PEEK YOUR BOTTOM 2 CARDS!
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.8)', fontFamily: 'Nunito', marginTop: 4 }}>
+                Memorize them — they'll be hidden in{' '}
+                <span style={{ color: '#FFC107', fontWeight: 900 }}>{peekTimeLeft}s</span>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -857,7 +901,7 @@ export default function Game() {
                 fontSize: 18, flexShrink: 0,
               }}>{p1.avatar}</div>
               <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>
-                ★ YOU (PLAYER 1)
+                ★ YOU ({p1.name})
               </span>
               <div className="score-badge" style={{ padding: '2px 10px' }}>
                 <Star size={10} fill="#FFC107" color="#FFC107" style={{ marginRight: 4 }} />
@@ -906,6 +950,7 @@ export default function Game() {
               revealCard={peekedCard?.playerIndex === 0 ? { row: peekedCard.row, col: peekedCard.col } : null}
               powerSelectable={powerMode === 'peek_self'}
               onPowerClick={(row, col) => handlePowerCardClick(0, row, col)}
+              peekPhase={peekActive}
             />
           </div>
 

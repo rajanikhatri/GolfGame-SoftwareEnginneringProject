@@ -63,11 +63,21 @@ export default function Lobby() {
 
       // Host started the game — all players load the same game state from Firestore
       if (room.status === 'playing') {
-        const roomPlayerConfigs = room.players.map(p => ({ id: p.id, name: p.name }));
+        const allConfigs = room.players.map(p => ({ id: p.id, name: p.name }));
+        // Reorder so the current user is always at index 0 (shown at bottom as "YOU")
+        const myIndex = allConfigs.findIndex(p => p.name === playerName);
+        const orderedConfigs = myIndex > 0
+          ? [allConfigs[myIndex], ...allConfigs.filter((_, i) => i !== myIndex)]
+          : allConfigs;
+
         if (room.gameState) {
-          initGameFromState(room.gameState, roomPlayerConfigs);
+          const hands = room.gameState.playerHands;
+          const orderedHands = myIndex > 0
+            ? [hands[myIndex], ...hands.filter((_: unknown, i: number) => i !== myIndex)]
+            : hands;
+          initGameFromState({ ...room.gameState, playerHands: orderedHands }, orderedConfigs);
         } else {
-          initGame(roomPlayerConfigs);
+          initGame(orderedConfigs);
         }
         navigate('/game');
         return;
@@ -133,6 +143,10 @@ export default function Lobby() {
     if (gameMode === 'multiplayer' && roomCode) {
       try {
         setStartError(null);
+        if (players.length < 2) {
+          setStartError('Need at least 2 players to start a multiplayer game.');
+          return;
+        }
         // Generate the deck ONCE on the host's browser and save to Firestore
         const roomPlayerConfigs = players.map(p => ({ id: p.id, name: p.name }));
         const gameState = buildInitialGameState(roomPlayerConfigs);
