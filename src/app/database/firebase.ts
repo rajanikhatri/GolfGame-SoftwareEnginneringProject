@@ -11,6 +11,15 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
+import {
+  getDatabase,
+  ref,
+  set,
+  remove,
+  onValue,
+  onDisconnect,
+  type Unsubscribe,
+} from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'AIzaSyA7T_eTujRvTgJHY67fA72lzLLBioDYSV8',
@@ -20,11 +29,36 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '1003116857411',
   appId: import.meta.env.VITE_FIREBASE_APP_ID ?? '1:1003116857411:web:2b4383436adc1f1f0d6cf6',
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ?? 'G-FD7FHQ940M',
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL ?? 'https://golfgame-ee8bf-default-rtdb.firebaseio.com',
 };
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(firebaseApp);
 export const firebaseDb = getFirestore(firebaseApp);
+export const firebaseRtdb = getDatabase(firebaseApp);
+
+// ─── Presence (Realtime Database) ─────────────────────────────────────────────
+
+// Call when a player enters the game. Returns a cleanup function to call on leave.
+export async function registerPresence(roomCode: string, playerId: string): Promise<() => void> {
+  const presenceRef = ref(firebaseRtdb, `presence/${roomCode}/${playerId}`);
+  await set(presenceRef, true);
+  // Firebase server auto-removes this node if the client disconnects (crash, close tab, etc.)
+  await onDisconnect(presenceRef).remove();
+  return () => remove(presenceRef);
+}
+
+// Subscribe to who is online in a room. Calls back with array of online player IDs.
+export function subscribeToRoomPresence(
+  roomCode: string,
+  onPresence: (onlineIds: string[]) => void,
+): Unsubscribe {
+  const presenceRef = ref(firebaseRtdb, `presence/${roomCode}`);
+  return onValue(presenceRef, snap => {
+    const val: Record<string, boolean> = snap.val() ?? {};
+    onPresence(Object.keys(val).filter(id => val[id] === true));
+  });
+}
 
 let analyticsPromise: Promise<Analytics | null> | null = null;
 

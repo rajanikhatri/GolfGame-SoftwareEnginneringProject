@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
-import { useGame, buildInitialGameState } from '../../backend/GameContext';
+import { useGame } from '../../backend/GameContext';
 import { subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
+import { ensureAnonymousUser } from '../../database/firebase';
 
 const AI_MESSAGES = [
   "Can't wait to destroy you all 😈",
@@ -34,7 +35,7 @@ const PLAYER_AVATARS = ['🎮', '🦊', '🐼', '🦋'];
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const { gameMode, playerName, roomCode, initGame, initGameFromState, chatMessages, sendChat, addChatMessage } = useGame();
+  const { gameMode, playerName, roomCode, initGame, initMultiplayer, chatMessages, sendChat, addChatMessage } = useGame();
   const initialPlayers: LobbyPlayer[] = gameMode === 'multiplayer'
     ? [{ id: 'p1', name: playerName || 'YOU', avatar: '🎮', color: '#1E88E5', ready: true, isYou: true }]
     : INITIAL_PLAYERS.map(p => p.isYou ? { ...p, name: playerName || 'YOU' } : p);
@@ -61,25 +62,20 @@ export default function Lobby() {
     const unsub = subscribeToRoom(roomCode, (room: FirebaseRoomDoc | null) => {
       if (!room) return;
 
-      // Host started the game — all players load the same game state from Firestore
+      // Host started — all players set their profile and navigate to /game
+      // GameContext will subscribe to Firestore game state automatically
       if (room.status === 'playing') {
-        const allConfigs = room.players.map(p => ({ id: p.id, name: p.name }));
-        // Reorder so the current user is always at index 0 (shown at bottom as "YOU")
-        const myIndex = allConfigs.findIndex(p => p.name === playerName);
-        const orderedConfigs = myIndex > 0
-          ? [allConfigs[myIndex], ...allConfigs.filter((_, i) => i !== myIndex)]
-          : allConfigs;
-
-        if (room.gameState) {
-          const hands = room.gameState.playerHands;
-          const orderedHands = myIndex > 0
-            ? [hands[myIndex], ...hands.filter((_: unknown, i: number) => i !== myIndex)]
-            : hands;
-          initGameFromState({ ...room.gameState, playerHands: orderedHands }, orderedConfigs);
-        } else {
-          initGame(orderedConfigs);
-        }
-        navigate('/game');
+        const glowColors = ['rgba(30,136,229,0.7)', 'rgba(229,57,53,0.7)', 'rgba(67,160,71,0.7)', 'rgba(171,71,188,0.7)'];
+        const profiles = room.players.map((p, i) => ({
+          id: p.id,
+          name: p.name,
+          avatar: PLAYER_AVATARS[i] ?? '🎮',
+          color: PLAYER_COLORS[i] ?? '#1E88E5',
+          glowColor: glowColors[i] ?? 'rgba(30,136,229,0.7)',
+        }));
+        ensureAnonymousUser().then(user => {
+          initMultiplayer(user.uid, profiles).then(() => navigate('/game'));
+        });
         return;
       }
 
@@ -147,10 +143,18 @@ export default function Lobby() {
           setStartError('Need at least 2 players to start a multiplayer game.');
           return;
         }
-        // Generate the deck ONCE on the host's browser and save to Firestore
-        const roomPlayerConfigs = players.map(p => ({ id: p.id, name: p.name }));
-        const gameState = buildInitialGameState(roomPlayerConfigs);
-        await startRoom(roomCode, gameState);
+        // Host generates deck once, saves to Firestore, then marks room as playing
+        const user = await ensureAnonymousUser();
+        const glowColors = ['rgba(30,136,229,0.7)', 'rgba(229,57,53,0.7)', 'rgba(67,160,71,0.7)', 'rgba(171,71,188,0.7)'];
+        const profiles = players.map((p, i) => ({
+          id: p.id,
+          name: p.name,
+          avatar: PLAYER_AVATARS[i] ?? '🎮',
+          color: PLAYER_COLORS[i] ?? '#1E88E5',
+          glowColor: glowColors[i] ?? 'rgba(30,136,229,0.7)',
+        }));
+        await initMultiplayer(user.uid, profiles, players.map(p => p.id));
+        await startRoom(roomCode);
         // Navigation happens for all players via the subscribeToRoom listener
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to start game';

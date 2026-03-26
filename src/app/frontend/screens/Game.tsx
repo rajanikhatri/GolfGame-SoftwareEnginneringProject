@@ -64,8 +64,35 @@ function MatchBanner({ countdown }: { countdown: number }) {
 }
 
 // ─── Power Banner ─────────────────────────────────────────────────────────────
-function PowerBanner({ power }: { power: '7' | '8' }) {
-  const isSelf = power === '7';
+const POWER_CONFIG = {
+  '7': {
+    bg: 'linear-gradient(135deg, #1565C0, #42A5F5, #1565C0)',
+    shadow: '0 4px 30px rgba(30,136,229,0.7)',
+    title: '🔍 PEEK YOUR CARD',
+    sub: 'Tap one of your face-down cards to peek at it for 3 seconds',
+  },
+  '8': {
+    bg: 'linear-gradient(135deg, #6A1B9A, #AB47BC, #6A1B9A)',
+    shadow: '0 4px 30px rgba(171,71,188,0.7)',
+    title: '🕵️ SPY POWER!',
+    sub: "Tap one of your opponent's cards to reveal it for 3 seconds",
+  },
+  '9': {
+    bg: 'linear-gradient(135deg, #1B5E20, #43A047, #1B5E20)',
+    shadow: '0 4px 30px rgba(67,160,71,0.7)',
+    title: '👀 PEEK & SWAP',
+    sub: 'Peek any 2 cards and optionally swap them — or skip the power',
+  },
+  '10': {
+    bg: 'linear-gradient(135deg, #E65100, #FF7043, #E65100)',
+    shadow: '0 4px 30px rgba(255,112,67,0.7)',
+    title: '🔀 BLIND SWAP',
+    sub: 'Blindly swap any 2 cards — or skip the power',
+  },
+} as const;
+
+function PowerBanner({ power }: { power: '7' | '8' | '9' | '10' }) {
+  const cfg = POWER_CONFIG[power];
   return (
     <motion.div
       initial={{ y: -80, opacity: 0 }}
@@ -73,17 +100,13 @@ function PowerBanner({ power }: { power: '7' | '8' }) {
       exit={{ y: -80, opacity: 0 }}
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 90,
-        background: isSelf
-          ? 'linear-gradient(135deg, #1565C0, #42A5F5, #1565C0)'
-          : 'linear-gradient(135deg, #6A1B9A, #AB47BC, #6A1B9A)',
+        background: cfg.bg,
         backgroundSize: '200% auto',
         animation: 'shimmer 1.2s linear infinite',
         padding: '14px 24px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: 16,
-        boxShadow: isSelf
-          ? '0 4px 30px rgba(30,136,229,0.7)'
-          : '0 4px 30px rgba(171,71,188,0.7)',
+        boxShadow: cfg.shadow,
         borderBottom: '3px solid rgba(255,255,255,0.5)',
       }}
     >
@@ -95,12 +118,10 @@ function PowerBanner({ power }: { power: '7' | '8' }) {
           textShadow: '0 2px 8px rgba(0,0,0,0.4)',
           letterSpacing: '0.04em',
         }}>
-          {isSelf ? '🔍 PEEK YOUR CARD' : '🕵️ SPY POWER!'}
+          {cfg.title}
         </div>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', fontFamily: 'Nunito' }}>
-          {isSelf
-            ? 'Tap one of your face-down cards to peek at it for 3 seconds'
-            : "Tap one of your opponent's cards to reveal it for 3 seconds"}
+          {cfg.sub}
         </div>
       </div>
       <Eye size={28} color="white" />
@@ -536,7 +557,7 @@ export default function Game() {
     drawnCard, phase, finalRound, knockedBy,
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, knock,
-    initGame, pendingPower, resolvePower,
+    initGame, pendingPower, resolvePower, skipPower, disconnectedPlayerName, swapCountdown, endPeek,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -546,10 +567,10 @@ export default function Game() {
 
   useEffect(() => {
     if (!peekActive) return;
-    if (peekTimeLeft === 0) { setPeekActive(false); return; }
+    if (peekTimeLeft === 0) { setPeekActive(false); endPeek(); return; }
     const t = setTimeout(() => setPeekTimeLeft(p => p - 1), 1000);
     return () => clearTimeout(t);
-  }, [peekTimeLeft, peekActive]);
+  }, [peekTimeLeft, peekActive, endPeek]);
 
   // Peeked card: { playerIndex, row, col }
   const [peekedCard, setPeekedCard] = useState<{
@@ -599,20 +620,24 @@ export default function Game() {
     }
   }, [phase, currentPlayerIndex, swapCard]);
 
-  // Called when player taps a card during power phase
+  // Called when player taps a card during power phase (powers 7 & 8 only)
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
     if (!pendingPower) return;
-    // Clear any existing peek timer
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
 
     setPeekedCard({ playerIndex, row, col });
 
-    // Reveal for 3 seconds then resolve power
+    // Pass the target player ID and flat card index so resolvePower can
+    // call the correct sync function in multiplayer (syncUsePower7/8).
+    const flatIndex = row * 2 + col;
+    const targetPlayerId = players[playerIndex]?.id ?? '';
+
+    // Reveal for 3 seconds then resolve the power
     peekTimerRef.current = setTimeout(() => {
       setPeekedCard(null);
-      resolvePower();
+      resolvePower(targetPlayerId, flatIndex);
     }, 3000);
-  }, [pendingPower, resolvePower]);
+  }, [pendingPower, resolvePower, players]);
 
   if (players.length === 0) return null;
 
@@ -685,6 +710,29 @@ export default function Game() {
             />
             <FinalRoundBanner knockerName={players.find(p => p.id === knockedBy)?.name || 'Someone'} />
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Disconnect notification */}
+      <AnimatePresence>
+        {disconnectedPlayerName && (
+          <motion.div
+            initial={{ y: -60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -60, opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, zIndex: 95,
+              background: 'rgba(229,57,53,0.92)',
+              padding: '12px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              boxShadow: '0 4px 20px rgba(229,57,53,0.5)',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>⚠️</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'white', fontFamily: 'Nunito, sans-serif' }}>
+              {disconnectedPlayerName} left the game
+            </span>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -957,18 +1005,40 @@ export default function Game() {
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {phase === 'swap' && currentPlayerIndex === 0 && drawnCard && (
+              <>
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="arcade-btn arcade-btn-blue"
+                  style={{ fontSize: 14, padding: '10px 20px' }}
+                  onClick={discardDrawn}
+                >
+                  🗑 DISCARD DRAWN
+                </motion.button>
+                {swapCountdown !== null && (
+                  <div style={{
+                    fontSize: 13, fontWeight: 900,
+                    color: swapCountdown <= 3 ? '#FF5252' : '#FFC107',
+                    fontFamily: 'Nunito',
+                    animation: swapCountdown <= 3 ? 'pulse-glow 0.6s infinite' : 'none',
+                  }}>
+                    ⏱ {swapCountdown}s
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Skip power button — available for all power ranks */}
+            {phase === 'power' && currentPlayerIndex === 0 && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.95 }}
                 className="arcade-btn arcade-btn-blue"
-                style={{ fontSize: 14, padding: '10px 20px' }}
-                onClick={discardDrawn}
+                style={{ fontSize: 13, padding: '10px 18px' }}
+                onClick={skipPower}
               >
-                {drawnCard.rank === '7'
-                  ? '👁 DISCARD + PEEK SELF'
-                  : drawnCard.rank === '8'
-                  ? '🕵️ DISCARD + SPY OPP'
-                  : '🗑 DISCARD DRAWN'}
+                ⏭ SKIP POWER
               </motion.button>
             )}
 
@@ -991,10 +1061,12 @@ export default function Game() {
               fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
               fontFamily: 'Nunito', textAlign: 'center',
             }}>
-              {phase === 'power' && pendingPower === '7' && '👁 Tap one of your face-down cards to peek'}
-              {phase === 'power' && pendingPower === '8' && '🕵️ Tap an opponent\'s card to spy on it'}
+              {phase === 'power' && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
+              {phase === 'power' && pendingPower === '8' && '🕵️ Tap an opponent\'s card to spy, or skip'}
+              {phase === 'power' && pendingPower === '9' && '👀 Power 9 not yet interactive — skip to continue'}
+              {phase === 'power' && pendingPower === '10' && '🔀 Power 10 not yet interactive — skip to continue'}
               {phase === 'draw' && currentPlayerIndex === 0 && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && currentPlayerIndex === 0 && '🔄 Swap with a card or discard'}
+              {phase === 'swap' && currentPlayerIndex === 0 && '🔄 Tap a card to swap, or discard'}
               {currentPlayerIndex !== 0 && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>
