@@ -724,10 +724,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
       return;
     }
-    // Solo: clear power and go to swap phase so the player can swap/discard the drawn card.
+    if (!drawnCard) {
+      setPendingPower(null);
+      setPhase('swap');
+      return;
+    }
+    // Solo: once the power is used, discard the power card immediately and continue
+    // through the normal reaction/turn-advance flow.
+    const discarded = { ...drawnCard, faceUp: true };
     setPendingPower(null);
-    setPhase('swap');
-  }, [gameMode, pendingPower]);
+    setLastPlayedCard(discarded);
+    setDiscardPile(prev => [discarded, ...prev]);
+    setDrawnCard(null);
+    setPhase('match_window');
+    const currentPlayers = playersRef.current;
+    soloShowMatchWindow(() => soloAdvanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
+  }, [gameMode, pendingPower, drawnCard, soloShowMatchWindow, soloAdvanceTurn]);
 
   const knockAction = useCallback(() => {
     if (gameMode === 'multiplayer') {

@@ -306,13 +306,32 @@ export function skipPower(state: GameState, playerId: string): GameState {
   return { ...state, phase: 'swap', pendingPower: null };
 }
 
+function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
+  if (!state.drawnCard) return state;
+
+  const discarded = { ...state.drawnCard, faceUp: true };
+  return {
+    ...state,
+    hands,
+    drawnCard: null,
+    discardPile: [discarded, ...state.discardPile],
+    lastDiscardedCard: discarded,
+    lastDiscardedById: playerId,
+    phase: 'react',
+    pendingPower: null,
+    reactionWindowOpen: true,
+    reactions: [],
+    power9Selection: null,
+  };
+}
+
 // Power 7: peek at one of your own hidden cards (just reveals it temporarily — UI handles display)
 export function usePower7(state: GameState, playerId: string, cardIndex: number): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '7') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
   const hand = state.hands.find(entry => entry.playerId === playerId);
   if (!hand?.cards[cardIndex]) return state;
-  return { ...state, phase: 'swap', pendingPower: null };
+  return discardActivePowerCard(state, playerId);
 }
 
 // Power 8: peek at one hidden card of an opponent (reveals it temporarily)
@@ -327,7 +346,7 @@ export function usePower8(
   if (targetPlayerId === actingPlayerId) return state;
   const hand = state.hands.find(entry => entry.playerId === targetPlayerId);
   if (!hand?.cards[cardIndex]) return state;
-  return { ...state, phase: 'swap', pendingPower: null };
+  return discardActivePowerCard(state, actingPlayerId);
 }
 
 // Power 9: peek any 2 cards. Call this twice (once per card selection), then call confirmPower9.
@@ -410,7 +429,7 @@ export function confirmPower9(
     });
   }
 
-  return { ...state, hands, phase: 'swap', pendingPower: null, power9Selection: null };
+  return discardActivePowerCard(state, actingPlayerId, hands);
 }
 
 // Power 10: blindly swap 2 players' cards (no peeking)
@@ -444,7 +463,7 @@ export function usePower10(
     return hand;
   });
 
-  return { ...state, hands, phase: 'swap', pendingPower: null };
+  return discardActivePowerCard(state, actingPlayerId, hands);
 }
 
 // ─── Phase: Swap ──────────────────────────────────────────────────────────────
