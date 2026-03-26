@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
-import { subscribeToRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
+import { subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
 
 const AI_MESSAGES = [
   "Can't wait to destroy you all 😈",
@@ -42,6 +42,7 @@ export default function Lobby() {
   const [inputMsg, setInputMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [isHost, setIsHost] = useState(gameMode === 'solo'); // solo player is always "host"
   const chatEndRef = useRef<HTMLDivElement>(null);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
@@ -58,6 +59,15 @@ export default function Lobby() {
 
     const unsub = subscribeToRoom(roomCode, (room: FirebaseRoomDoc | null) => {
       if (!room) return;
+
+      // Host started the game — navigate all players to /game with real player data
+      if (room.status === 'playing') {
+        const roomPlayerConfigs = room.players.map(p => ({ id: p.id, name: p.name }));
+        initGame(roomPlayerConfigs);
+        navigate('/game');
+        return;
+      }
+
       const updatedPlayers: LobbyPlayer[] = room.players.map((p, i) => ({
         id: p.id,
         name: p.name,
@@ -67,9 +77,11 @@ export default function Lobby() {
         isYou: p.name === playerName,
       }));
       setPlayers(updatedPlayers);
+      // Determine if current user is the host
+      const myPlayer = room.players.find(p => p.name === playerName);
+      setIsHost(!!myPlayer && myPlayer.id === room.hostId);
       // Add chat message when new player joins
-      const prev = updatedPlayers.length;
-      if (prev > 1) {
+      if (updatedPlayers.length > 1) {
         const newest = room.players[room.players.length - 1];
         addChatMessage({ playerId: newest.id, playerName: newest.name, message: '✅ Joined the room!' });
       }
@@ -112,9 +124,19 @@ export default function Lobby() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleStartGame = () => {
-    initGame();
-    setCountdown(3);
+  const handleStartGame = async () => {
+    if (gameMode === 'multiplayer' && roomCode) {
+      try {
+        await startRoom(roomCode);
+        // Both host and joiner will navigate via the subscribeToRoom listener above
+      } catch (e) {
+        console.error('Failed to start room:', e);
+      }
+    } else {
+      // Solo mode — start locally with countdown
+      initGame();
+      setCountdown(3);
+    }
   };
 
   useEffect(() => {
@@ -386,16 +408,18 @@ export default function Lobby() {
 
           {/* Start button */}
           <motion.button
-            whileTap={{ scale: 0.96 }}
+            whileTap={{ scale: isHost && allReady ? 0.96 : 1 }}
             className="arcade-btn arcade-btn-green py-5 w-full"
             style={{
               fontSize: 22, fontWeight: 900,
-              opacity: allReady ? 1 : 0.5,
-              cursor: allReady ? 'pointer' : 'not-allowed',
+              opacity: isHost && allReady ? 1 : 0.5,
+              cursor: isHost && allReady ? 'pointer' : 'not-allowed',
             }}
-            onClick={allReady ? handleStartGame : undefined}
+            onClick={isHost && allReady ? handleStartGame : undefined}
           >
-            {allReady ? '⚡ START GAME ⚡' : '⏳ WAITING FOR PLAYERS...'}
+            {!isHost
+              ? '⏳ WAITING FOR HOST TO START...'
+              : allReady ? '⚡ START GAME ⚡' : '⏳ WAITING FOR PLAYERS...'}
           </motion.button>
         </div>
 

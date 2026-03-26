@@ -55,7 +55,7 @@ interface GameContextType {
   chatMessages: ChatMessage[];
   lastPlayedCard: Card | null;
   pendingPower: '7' | '8' | null;
-  initGame: () => void;
+  initGame: (roomPlayers?: Array<{ id: string; name: string }>) => void;
   drawFromPile: () => void;
   takeFromDiscard: () => void;
   swapCard: (row: number, col: number) => void;
@@ -205,7 +205,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const advanceTurn = useCallback((fromIndex: number, currentPlayers: Player[], currentFinalRound: boolean, currentKnockedBy: string | null) => {
-    const nextIndex = (fromIndex + 1) % 4;
+    const nextIndex = (fromIndex + 1) % currentPlayers.length;
 
     // Check if final round is over
     if (currentFinalRound && currentKnockedBy) {
@@ -300,13 +300,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [currentPlayerIndex, phase, players, matchWindowActive, showMatchWindow, advanceTurn]);
 
-  const initGame = useCallback(() => {
+  const initGame = useCallback((roomPlayers?: Array<{ id: string; name: string }>) => {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
     setPendingPower(null);
 
     const deck = createDeck();
-    const newPlayers: Player[] = PLAYER_CONFIGS.map((cfg, i) => {
+    // For multiplayer, use real player names/ids but keep avatars/colors from PLAYER_CONFIGS by index
+    const configs = roomPlayers
+      ? roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }))
+      : PLAYER_CONFIGS;
+
+    const newPlayers: Player[] = configs.map((cfg, i) => {
       const cards: (Card | null)[][] = [[], []];
       for (let row = 0; row < 2; row++) {
         for (let col = 0; col < 2; col++) {
@@ -318,7 +323,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           cards[row].push(card);
         }
       }
-      return { ...cfg, cards, score: 0, isAI: i !== 0, isReady: true, hasKnocked: false };
+      // In multiplayer all players are human (no AI); in solo all others are AI
+      return { ...cfg, cards, score: 0, isAI: roomPlayers ? false : i !== 0, isReady: true, hasKnocked: false };
     });
 
     const firstDiscard = deck.pop()!;
