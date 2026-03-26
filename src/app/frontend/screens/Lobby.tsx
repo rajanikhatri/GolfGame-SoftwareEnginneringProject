@@ -45,6 +45,13 @@ export default function Lobby() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
+  // Redirect to home if there's no active game session
+  useEffect(() => {
+    if (!gameMode) {
+      navigate('/');
+    }
+  }, [gameMode, navigate]);
+
   // Real-time Firebase listener for multiplayer
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !roomCode) return;

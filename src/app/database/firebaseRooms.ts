@@ -145,7 +145,7 @@ export async function joinRoomByCode(code: string, profile: MultiplayerProfileIn
         color: profile.color,
         glowColor: profile.glowColor,
         slotIndex: nextSlot,
-        ready: false,
+        ready: true,
         joinedAt: Date.now(),
       },
     ];
