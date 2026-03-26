@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
-import { useGame } from '../../backend/GameContext';
+import { useGame, buildInitialGameState } from '../../backend/GameContext';
 import { subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
 
 const AI_MESSAGES = [
@@ -34,7 +34,7 @@ const PLAYER_AVATARS = ['🎮', '🦊', '🐼', '🦋'];
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const { gameMode, playerName, roomCode, initGame, chatMessages, sendChat, addChatMessage } = useGame();
+  const { gameMode, playerName, roomCode, initGame, initGameFromState, chatMessages, sendChat, addChatMessage } = useGame();
   const initialPlayers: LobbyPlayer[] = gameMode === 'multiplayer'
     ? [{ id: 'p1', name: playerName || 'YOU', avatar: '🎮', color: '#1E88E5', ready: true, isYou: true }]
     : INITIAL_PLAYERS.map(p => p.isYou ? { ...p, name: playerName || 'YOU' } : p);
@@ -42,7 +42,8 @@ export default function Lobby() {
   const [inputMsg, setInputMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [isHost, setIsHost] = useState(gameMode === 'solo'); // solo player is always "host"
+  const [isHost, setIsHost] = useState(gameMode === 'solo');
+  const [startError, setStartError] = useState<string | null>(null); // solo player is always "host"
   const chatEndRef = useRef<HTMLDivElement>(null);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
@@ -60,10 +61,14 @@ export default function Lobby() {
     const unsub = subscribeToRoom(roomCode, (room: FirebaseRoomDoc | null) => {
       if (!room) return;
 
-      // Host started the game — navigate all players to /game with real player data
+      // Host started the game — all players load the same game state from Firestore
       if (room.status === 'playing') {
         const roomPlayerConfigs = room.players.map(p => ({ id: p.id, name: p.name }));
-        initGame(roomPlayerConfigs);
+        if (room.gameState) {
+          initGameFromState(room.gameState, roomPlayerConfigs);
+        } else {
+          initGame(roomPlayerConfigs);
+        }
         navigate('/game');
         return;
       }
@@ -127,9 +132,15 @@ export default function Lobby() {
   const handleStartGame = async () => {
     if (gameMode === 'multiplayer' && roomCode) {
       try {
-        await startRoom(roomCode);
-        // Both host and joiner will navigate via the subscribeToRoom listener above
+        setStartError(null);
+        // Generate the deck ONCE on the host's browser and save to Firestore
+        const roomPlayerConfigs = players.map(p => ({ id: p.id, name: p.name }));
+        const gameState = buildInitialGameState(roomPlayerConfigs);
+        await startRoom(roomCode, gameState);
+        // Navigation happens for all players via the subscribeToRoom listener
       } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to start game';
+        setStartError(msg);
         console.error('Failed to start room:', e);
       }
     } else {
@@ -407,6 +418,18 @@ export default function Lobby() {
           </div>
 
           {/* Start button */}
+          {startError && (
+            <div style={{
+              background: 'rgba(229,57,53,0.15)',
+              border: '2px solid rgba(229,57,53,0.4)',
+              borderRadius: 12, padding: '10px 16px',
+              fontSize: 13, fontWeight: 700,
+              color: '#EF9A9A', fontFamily: 'Nunito',
+            }}>
+              ⚠️ {startError}
+            </div>
+          )}
+
           <motion.button
             whileTap={{ scale: isHost && allReady ? 0.96 : 1 }}
             className="arcade-btn arcade-btn-green py-5 w-full"

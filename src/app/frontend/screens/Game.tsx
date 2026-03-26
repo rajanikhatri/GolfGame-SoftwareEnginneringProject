@@ -768,32 +768,36 @@ export default function Game() {
 
         {/* Top player (P3) */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-          <PlayerPanelComp
-            player={p3}
-            isActive={currentPlayerIndex === 2}
-            isYou={false}
-            position="top"
-            aiThinking={aiThinking && currentPlayerIndex === 2}
-            score="?"
-            revealCard={peekedCard?.playerIndex === 2 ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
-          />
+          {p3 && (
+            <PlayerPanelComp
+              player={p3}
+              isActive={currentPlayerIndex === 2}
+              isYou={false}
+              position="top"
+              aiThinking={aiThinking && currentPlayerIndex === 2}
+              score="?"
+              revealCard={peekedCard?.playerIndex === 2 ? { row: peekedCard.row, col: peekedCard.col } : null}
+              powerSelectable={powerMode === 'peek_opponent'}
+              onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
+            />
+          )}
         </div>
 
         {/* Left player (P2) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-          <PlayerPanelComp
-            player={p2}
-            isActive={currentPlayerIndex === 1}
-            isYou={false}
-            position="left"
-            aiThinking={aiThinking && currentPlayerIndex === 1}
-            score="?"
-            revealCard={peekedCard?.playerIndex === 1 ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
-          />
+          {p2 && (
+            <PlayerPanelComp
+              player={p2}
+              isActive={currentPlayerIndex === 1}
+              isYou={false}
+              position="left"
+              aiThinking={aiThinking && currentPlayerIndex === 1}
+              score="?"
+              revealCard={peekedCard?.playerIndex === 1 ? { row: peekedCard.row, col: peekedCard.col } : null}
+              powerSelectable={powerMode === 'peek_opponent'}
+              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+            />
+          )}
         </div>
 
         {/* Center area */}
@@ -814,17 +818,19 @@ export default function Game() {
 
         {/* Right player (P4) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <PlayerPanelComp
-            player={p4}
-            isActive={currentPlayerIndex === 3}
-            isYou={false}
-            position="right"
-            aiThinking={aiThinking && currentPlayerIndex === 3}
-            score="?"
-            revealCard={peekedCard?.playerIndex === 3 ? { row: peekedCard.row, col: peekedCard.col } : null}
-            powerSelectable={powerMode === 'peek_opponent'}
-            onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
-          />
+          {p4 && (
+            <PlayerPanelComp
+              player={p4}
+              isActive={currentPlayerIndex === 3}
+              isYou={false}
+              position="right"
+              aiThinking={aiThinking && currentPlayerIndex === 3}
+              score="?"
+              revealCard={peekedCard?.playerIndex === 3 ? { row: peekedCard.row, col: peekedCard.col } : null}
+              powerSelectable={powerMode === 'peek_opponent'}
+              onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
+            />
+          )}
         </div>
 
         {/* Bottom player (P1 - YOU) */}

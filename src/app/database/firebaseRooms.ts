@@ -36,6 +36,8 @@ export interface FirebaseRoomDoc {
   roomName?: string;
   maxPlayers?: number;
   password?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  gameState?: any;
 }
 
 export interface MultiplayerProfileInput {
@@ -204,7 +206,7 @@ export async function toggleReadyState(code: string) {
   });
 }
 
-export async function startRoom(code: string) {
+export async function startRoom(code: string, gameState?: unknown) {
   const user = await ensureAnonymousUser();
   const ref = roomRef(code);
 
@@ -213,12 +215,11 @@ export async function startRoom(code: string) {
     if (!snap.exists()) throw new Error('Room not found.');
     const room = snap.data() as FirebaseRoomDoc;
     if (room.hostId !== user.uid) throw new Error('Only the host can start the game.');
-    if (room.players.length < 2) throw new Error('Need at least 2 players.');
-    if (!room.players.every((p) => p.ready)) throw new Error('All players must be ready.');
 
     tx.update(ref, {
       status: 'playing' satisfies RoomStatus,
       updatedAt: Date.now(),
+      ...(gameState ? { gameState } : {}),
     });
   });
 }

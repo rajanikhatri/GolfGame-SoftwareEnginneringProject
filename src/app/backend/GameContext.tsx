@@ -32,6 +32,41 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+// Firestore doesn't support nested arrays, so cards are stored as a flat array of 4
+export interface SerializedGameState {
+  drawPile: Card[];
+  discardPile: Card[];
+  playerHands: { id: string; name: string; cards: (Card | null)[] }[];
+}
+
+export function buildInitialGameState(
+  roomPlayers: Array<{ id: string; name: string }>,
+): SerializedGameState {
+  const deck = createDeck();
+  const configs = roomPlayers.map((p, i) => ({
+    ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]),
+    id: p.id,
+    name: p.name,
+  }));
+
+  const playerHands = configs.map((cfg, i) => {
+    const cards: (Card | null)[] = [];
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 2; col++) {
+        const card = deck.pop()!;
+        if (i === 0 && row === 1) card.faceUp = true;
+        cards.push(card);
+      }
+    }
+    return { id: cfg.id, name: cfg.name, cards };
+  });
+
+  const firstDiscard = deck.pop()!;
+  firstDiscard.faceUp = true;
+
+  return { drawPile: deck, discardPile: [firstDiscard], playerHands };
+}
+
 interface GameContextType {
   gameMode: 'multiplayer' | 'solo' | null;
   setGameMode: (mode: 'multiplayer' | 'solo') => void;
@@ -56,6 +91,7 @@ interface GameContextType {
   lastPlayedCard: Card | null;
   pendingPower: '7' | '8' | null;
   initGame: (roomPlayers?: Array<{ id: string; name: string }>) => void;
+  initGameFromState: (state: SerializedGameState, roomPlayers: Array<{ id: string; name: string }>) => void;
   drawFromPile: () => void;
   takeFromDiscard: () => void;
   swapCard: (row: number, col: number) => void;
@@ -345,6 +381,45 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setLastPlayedCard(null);
   }, []);
 
+  const initGameFromState = useCallback((
+    state: SerializedGameState,
+    roomPlayers: Array<{ id: string; name: string }>,
+  ) => {
+    if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+    gameActiveRef.current = true;
+    setPendingPower(null);
+
+    const configs = roomPlayers.map((p, i) => ({
+      ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]),
+      id: p.id,
+      name: p.name,
+    }));
+
+    const newPlayers: Player[] = configs.map((cfg, i) => {
+      const flat = state.playerHands[i]?.cards ?? [];
+      // Convert flat array of 4 back to 2×2 grid
+      const cards: (Card | null)[][] = [
+        [flat[0] ?? null, flat[1] ?? null],
+        [flat[2] ?? null, flat[3] ?? null],
+      ];
+      return { ...cfg, cards, score: 0, isAI: false, isReady: true, hasKnocked: false };
+    });
+
+    setPlayers(newPlayers);
+    setDrawPile(state.drawPile);
+    setDiscardPile(state.discardPile);
+    setCurrentPlayerIndex(0);
+    setDrawnCard(null);
+    setPhase('draw');
+    setFinalRound(false);
+    setKnockedBy(null);
+    setMatchWindowActive(false);
+    setMatchCountdown(3);
+    setAiThinking(false);
+    setWinner(null);
+    setLastPlayedCard(null);
+  }, []);
+
   const drawFromPile = useCallback(() => {
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
 
@@ -482,7 +557,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard,
       pendingPower,
-      initGame, drawFromPile, takeFromDiscard,
+      initGame, initGameFromState, drawFromPile, takeFromDiscard,
       swapCard, discardDrawn, knock,
       sendChat, addChatMessage, resetGame, resolvePower,
     }}>
