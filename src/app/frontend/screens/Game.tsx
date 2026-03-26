@@ -820,13 +820,13 @@ export default function Game() {
         }}>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
-            background: currentPlayerIndex === 0 ? '#4CAF50' : '#FFC107',
+            background: isMyTurn ? '#4CAF50' : '#FFC107',
             animation: 'pulse-glow 1.5s infinite',
           }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: 'white', fontFamily: 'Nunito' }}>
             {pendingPower === '7' ? '👁 PEEK YOUR CARD'
               : pendingPower === '8' ? '🕵️ SPY AN OPPONENT'
-              : currentPlayerIndex === 0 ? '🎮 YOUR TURN'
+              : isMyTurn ? '🎮 YOUR TURN'
               : `${players[currentPlayerIndex]?.name}'S TURN`}
           </span>
         </div>
@@ -931,14 +931,14 @@ export default function Game() {
         <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           {/* Player hand */}
           <div style={{
-            background: currentPlayerIndex === 0
+            background: isMyTurn
               ? `linear-gradient(135deg, ${p1.color}20, ${p1.color}08)`
               : 'rgba(255,255,255,0.04)',
-            border: currentPlayerIndex === 0 ? `2px solid ${p1.color}80` : '2px solid rgba(255,255,255,0.08)',
+            border: isMyTurn ? `2px solid ${p1.color}80` : '2px solid rgba(255,255,255,0.08)',
             borderRadius: 20, padding: '16px 24px',
-            boxShadow: currentPlayerIndex === 0 ? `0 0 30px ${p1.color}30` : 'none',
+            boxShadow: isMyTurn ? `0 0 30px ${p1.color}30` : 'none',
             transition: 'all 0.3s ease',
-            animation: currentPlayerIndex === 0 ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
+            animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
@@ -993,7 +993,7 @@ export default function Game() {
 
             <PlayerCardGrid
               player={p1}
-              isActive={currentPlayerIndex === 0}
+              isActive={isMyTurn}
               isYou={true}
               onCardClick={handleCardClick}
               selectedForSwap={swapMode}

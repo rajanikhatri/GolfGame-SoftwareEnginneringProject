@@ -195,6 +195,8 @@ export function advanceTurn(state: GameState): GameState {
     phase: 'draw',
     drawnCard: null,
     pendingPower: null,
+    lastDiscardedCard: null,
+    lastDiscardedById: null,
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
@@ -516,7 +518,13 @@ export function submitReaction(
 
 // Called when the 3-second reaction window closes
 export function resolveReactionWindow(state: GameState): GameState {
-  if (!state.reactionWindowOpen || !state.lastDiscardedCard) {
+  // Multiple clients may race to close the same window. Once it's already closed,
+  // treat later resolver calls as a no-op so the turn cannot advance twice.
+  if (!state.reactionWindowOpen) {
+    return state;
+  }
+
+  if (!state.lastDiscardedCard) {
     return advanceTurn({ ...state, reactionWindowOpen: false, reactions: [] });
   }
 

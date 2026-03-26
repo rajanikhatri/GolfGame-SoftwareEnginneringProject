@@ -265,6 +265,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [drawPile,           setDrawPile]           = useState<Card[]>([]);
   const [discardPile,        setDiscardPile]        = useState<Card[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
+  const [currentTurnPlayerId, setCurrentTurnPlayerId] = useState<string | null>(null);
   const [drawnCard,          setDrawnCard]          = useState<Card | null>(null);
   const [phase,              setPhase]              = useState<GamePhase>('draw');
   const [finalRound,         setFinalRound]         = useState(false);
@@ -307,7 +308,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // Derived: is it the current user's turn?
   const isMyTurn = gameMode === 'solo'
     ? currentPlayerIndex === 0
-    : players[currentPlayerIndex]?.id === myPlayerId;
+    : currentTurnPlayerId === myPlayerId;
 
   // ── Multiplayer: Subscribe to Firestore game state ──────────────────────────
   useEffect(() => {
@@ -421,6 +422,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(localCurrentIndex);
+    setCurrentTurnPlayerId(state.playerOrder[state.currentPlayerIndex] ?? null);
     // Drawn card is stored face-down in Firestore to hide it from opponents.
     // Flip it face-up only for the player who actually drew it.
     const isMyDrawnCard = state.drawnCard !== null &&
@@ -606,7 +608,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return { ...cfg, cards, score: 0, isAI: roomPlayers ? false : i !== 0, isReady: true, hasKnocked: false };
     });
     setPlayers(newPlayers); setDrawPile([...deck]); setDiscardPile([]);
-    setCurrentPlayerIndex(0); setDrawnCard(null); setPhase('draw');
+    setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
     setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null);
   }, []);
@@ -625,7 +627,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return { ...cfg, cards, score: 0, isAI: false, isReady: true, hasKnocked: false };
     });
     setPlayers(newPlayers); setDrawPile(state.drawPile); setDiscardPile(state.discardPile);
-    setCurrentPlayerIndex(0); setDrawnCard(null); setPhase('draw');
+    setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
     setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null);
   }, []);
@@ -774,7 +776,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPlayerProfiles([]);
     setPlayers([]);
     setDrawPile([]); setDiscardPile([]);
-    setCurrentPlayerIndex(0); setDrawnCard(null); setPhase('draw');
+    setCurrentPlayerIndex(0); setCurrentTurnPlayerId(null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
     setAiThinking(false); setWinner(null);
     setChatMessages(LOBBY_MESSAGES);
