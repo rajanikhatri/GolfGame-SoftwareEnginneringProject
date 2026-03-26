@@ -205,7 +205,9 @@ function PlayerCardGrid({
             const isPeekRow = peekPhase && isYou && ri === 1;
 
             // During peek phase bottom row: show card face-up by overriding faceUp
-            const displayCard = (isPeekRow && card) ? { ...card, faceUp: true } : card;
+            const displayCard = (isPeekRow || isPeeked) && card
+              ? { ...card, faceUp: true }
+              : card;
             const faceDown = isYou ? !displayCard?.faceUp : !isPeeked;
 
             // Power click targets:
@@ -376,19 +378,18 @@ function PlayerPanelComp({
 
 // ─── Draw / Discard Piles ─────────────────────────────────────────────────────
 function PileArea({
-  drawPile, discardPile, drawnCard, phase, currentPlayerIndex,
+  drawPile, discardPile, drawnCard, phase, isMyTurn,
   onDraw, onTakeDiscard,
 }: {
   drawPile: Card[];
   discardPile: Card[];
   drawnCard: Card | null;
   phase: string;
-  currentPlayerIndex: number;
+  isMyTurn: boolean;
   onDraw: () => void;
   onTakeDiscard: () => void;
 }) {
-  const isPlayerTurn = currentPlayerIndex === 0;
-  const canDraw = isPlayerTurn && phase === 'draw';
+  const canDraw = isMyTurn && phase === 'draw';
   const discardTop = discardPile[0];
 
   return (
@@ -554,6 +555,7 @@ export default function Game() {
   const navigate = useNavigate();
   const {
     players, drawPile, discardPile, currentPlayerIndex,
+    isMyTurn,
     drawnCard, phase, finalRound, knockedBy,
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, knock,
@@ -603,8 +605,8 @@ export default function Game() {
 
   // Auto-enable swap mode when player draws
   useEffect(() => {
-    setSwapMode(phase === 'swap' && currentPlayerIndex === 0);
-  }, [phase, currentPlayerIndex]);
+    setSwapMode(phase === 'swap' && isMyTurn);
+  }, [phase, isMyTurn]);
 
   // Clear peeked card when power resolves
   useEffect(() => {
@@ -614,11 +616,11 @@ export default function Game() {
   }, [pendingPower]);
 
   const handleCardClick = useCallback((row: number, col: number) => {
-    if (phase === 'swap' && currentPlayerIndex === 0) {
+    if (phase === 'swap' && isMyTurn) {
       swapCard(row, col);
       setSwapMode(false);
     }
-  }, [phase, currentPlayerIndex, swapCard]);
+  }, [phase, isMyTurn, swapCard]);
 
   // Called when player taps a card during power phase (powers 7 & 8 only)
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
@@ -902,7 +904,7 @@ export default function Game() {
             discardPile={discardPile}
             drawnCard={drawnCard}
             phase={phase}
-            currentPlayerIndex={currentPlayerIndex}
+            isMyTurn={isMyTurn}
             onDraw={drawFromPile}
             onTakeDiscard={takeFromDiscard}
           />
@@ -1004,7 +1006,7 @@ export default function Game() {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {phase === 'swap' && currentPlayerIndex === 0 && drawnCard && (
+            {phase === 'swap' && isMyTurn && drawnCard && (
               <>
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
@@ -1029,7 +1031,7 @@ export default function Game() {
             )}
 
             {/* Skip power button — available for all power ranks */}
-            {phase === 'power' && currentPlayerIndex === 0 && (
+            {phase === 'power' && isMyTurn && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1042,7 +1044,7 @@ export default function Game() {
               </motion.button>
             )}
 
-            {!finalRound && currentPlayerIndex === 0 && phase !== 'power' && (
+            {!finalRound && isMyTurn && phase !== 'power' && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 className="arcade-btn arcade-btn-red"
@@ -1065,9 +1067,9 @@ export default function Game() {
               {phase === 'power' && pendingPower === '8' && '🕵️ Tap an opponent\'s card to spy, or skip'}
               {phase === 'power' && pendingPower === '9' && '👀 Power 9 not yet interactive — skip to continue'}
               {phase === 'power' && pendingPower === '10' && '🔀 Power 10 not yet interactive — skip to continue'}
-              {phase === 'draw' && currentPlayerIndex === 0 && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && currentPlayerIndex === 0 && '🔄 Tap a card to swap, or discard'}
-              {currentPlayerIndex !== 0 && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
+              {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
+              {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
+              {!isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>
         </div>

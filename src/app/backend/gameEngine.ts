@@ -308,18 +308,9 @@ export function skipPower(state: GameState, playerId: string): GameState {
 export function usePower7(state: GameState, playerId: string, cardIndex: number): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '7') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-
-  const hands = state.hands.map(hand => {
-    if (hand.playerId !== playerId) return hand;
-    return {
-      ...hand,
-      cards: hand.cards.map((c, i) =>
-        i === cardIndex && c ? { ...c, faceUp: true } : c
-      ),
-    };
-  });
-
-  return { ...state, hands, phase: 'swap', pendingPower: null };
+  const hand = state.hands.find(entry => entry.playerId === playerId);
+  if (!hand?.cards[cardIndex]) return state;
+  return { ...state, phase: 'swap', pendingPower: null };
 }
 
 // Power 8: peek at one hidden card of an opponent (reveals it temporarily)
@@ -331,18 +322,10 @@ export function usePower8(
 ): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '8') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
-
-  const hands = state.hands.map(hand => {
-    if (hand.playerId !== targetPlayerId) return hand;
-    return {
-      ...hand,
-      cards: hand.cards.map((c, i) =>
-        i === cardIndex && c ? { ...c, faceUp: true } : c
-      ),
-    };
-  });
-
-  return { ...state, hands, phase: 'swap', pendingPower: null };
+  if (targetPlayerId === actingPlayerId) return state;
+  const hand = state.hands.find(entry => entry.playerId === targetPlayerId);
+  if (!hand?.cards[cardIndex]) return state;
+  return { ...state, phase: 'swap', pendingPower: null };
 }
 
 // Power 9: peek any 2 cards. Call this twice (once per card selection), then call confirmPower9.
@@ -475,7 +458,7 @@ export function swapCard(state: GameState, playerId: string, cardIndex: number):
   const hands = state.hands.map(hand => {
     if (hand.playerId !== playerId) return hand;
     const cards = [...hand.cards];
-    cards[cardIndex] = { ...state.drawnCard!, faceUp: true };
+    cards[cardIndex] = { ...state.drawnCard!, faceUp: false };
     return { ...hand, cards };
   });
 

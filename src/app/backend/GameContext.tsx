@@ -334,6 +334,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerProfiles, gameMode]);
 
+  useEffect(() => {
+    if (gameMode !== 'multiplayer' || !myPlayerId) return;
+    if (lastGameStateRef.current) {
+      applyEngineState(lastGameStateRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myPlayerId, gameMode]);
+
   // ── Multiplayer: Presence (disconnect detection) ───────────────────────────
   const prevOnlineIdsRef = useRef<string[]>([]);
   useEffect(() => {
