@@ -11,8 +11,9 @@ export interface Card {
   faceUp: boolean;
 }
 
-// Each player's hand is a flat array of 4 cards (Firestore doesn't support nested arrays)
-// Index layout: [row0col0, row0col1, row1col0, row1col1]
+// Each player's hand is stored as a flat array because Firestore doesn't support
+// nested arrays. The initial layout is [row0col0, row0col1, row1col0, row1col1],
+// and penalty cards may extend the hand with additional row pairs.
 export interface PlayerHand {
   playerId: string;
   cards: (Card | null)[];
@@ -28,7 +29,7 @@ export type GamePhase =
 
 export interface ReactionEntry {
   playerId: string;
-  cardIndex: number;   // index (0–3) in that player's hand
+  cardIndex: number;   // flat index in that player's hand
   timestamp: number;   // ms since epoch — use Firestore serverTimestamp in sync layer
 }
 
@@ -131,8 +132,8 @@ export function createInitialGameState(playerIds: string[]): GameState {
 // ─── Score Calculation ────────────────────────────────────────────────────────
 
 export function calcHandScore(cards: (Card | null)[]): number {
-  // cards layout: [row0col0, row0col1, row1col0, row1col1]
-  // Columns: col0 = indices 0,2  |  col1 = indices 1,3
+  // The starting 2x2 hand still uses column-cancel rules. Any extra penalty cards
+  // beyond the original four count individually.
   let total = 0;
   for (let col = 0; col < 2; col++) {
     const top = cards[col];       // row 0
@@ -141,6 +142,9 @@ export function calcHandScore(cards: (Card | null)[]): number {
     if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
     if (top?.faceUp) total += top.value;
     if (bot?.faceUp) total += bot.value;
+  }
+  for (let i = 4; i < cards.length; i++) {
+    if (cards[i]?.faceUp) total += cards[i]!.value;
   }
   return total;
 }
@@ -175,6 +179,25 @@ function reshuffleDiscardIntoDraw(state: GameState): GameState {
     ...state,
     drawPile: shuffle(rest.map(c => ({ ...c, faceUp: false }))),
     discardPile: keepTop ? [keepTop] : [],
+  };
+}
+
+function addCardToHand(cards: (Card | null)[], card: Card): (Card | null)[] {
+  const nextCards = [...cards];
+  const nullIdx = nextCards.findIndex(existing => existing === null);
+  if (nullIdx !== -1) {
+    nextCards[nullIdx] = card;
+  } else {
+    nextCards.push(card);
+  }
+  return nextCards;
+}
+
+function cloneCardForPenalty(card: Card, ownerId: string, timestamp: number): Card {
+  return {
+    ...card,
+    id: `${card.id}-penalty-${ownerId}-${timestamp}`,
+    faceUp: true,
   };
 }
 
@@ -551,21 +574,27 @@ export function resolveReactionWindow(state: GameState): GameState {
 
   // Sort reactions by timestamp (fastest first)
   const sorted = [...state.reactions].sort((a, b) => a.timestamp - b.timestamp);
+  const winningReaction = sorted.find(reaction => {
+    const hand = state.hands.find(entry => entry.playerId === reaction.playerId);
+    return hand?.cards[reaction.cardIndex]?.value === discardedValue;
+  }) ?? null;
 
   let hands = state.hands;
   let drawPile = state.drawPile;
+  let discardPile = state.discardPile;
 
-  sorted.forEach((reaction, idx) => {
+  sorted.forEach((reaction) => {
     const hand = hands.find(h => h.playerId === reaction.playerId);
     if (!hand) return;
 
     const reactedCard = hand.cards[reaction.cardIndex];
 
-    // Check if the card actually matches the discarded card's value
-    const isMatch = reactedCard?.value === discardedValue;
-    const isFirst = idx === 0;
-
-    if (isMatch && isFirst) {
+    if (
+      winningReaction &&
+      reaction.playerId === winningReaction.playerId &&
+      reaction.cardIndex === winningReaction.cardIndex &&
+      reaction.timestamp === winningReaction.timestamp
+    ) {
       // Fastest correct reaction — card is successfully discarded
       hands = hands.map(h => {
         if (h.playerId !== reaction.playerId) return h;
@@ -573,23 +602,31 @@ export function resolveReactionWindow(state: GameState): GameState {
         cards[reaction.cardIndex] = null;
         return { ...h, cards };
       });
+      if (reactedCard) {
+        discardPile = [{ ...reactedCard, faceUp: true }, ...discardPile];
+      }
     } else {
-      // Wrong card OR slower correct reaction — draw 1 penalty card
-      let s = reshuffleDiscardIntoDraw({ ...state, hands, drawPile });
+      // Wrong card OR slower correct reaction — take the exposed discard and one
+      // additional penalty card from the deck.
+      hands = hands.map(h => {
+        if (h.playerId !== reaction.playerId) return h;
+        return {
+          ...h,
+          cards: addCardToHand(
+            h.cards,
+            cloneCardForPenalty(state.lastDiscardedCard!, reaction.playerId, reaction.timestamp),
+          ),
+        };
+      });
+
+      let s = reshuffleDiscardIntoDraw({ ...state, hands, drawPile, discardPile });
       if (s.drawPile.length > 0) {
         const penaltyCard = { ...s.drawPile[s.drawPile.length - 1], faceUp: false };
         drawPile = s.drawPile.slice(0, s.drawPile.length - 1);
-        // Add penalty card to the first null slot or push it
+        discardPile = s.discardPile;
         hands = hands.map(h => {
           if (h.playerId !== reaction.playerId) return h;
-          const cards = [...h.cards];
-          const nullIdx = cards.findIndex(c => c === null);
-          if (nullIdx !== -1) {
-            cards[nullIdx] = penaltyCard;
-          } else {
-            cards.push(penaltyCard); // shouldn't normally happen
-          }
-          return { ...h, cards };
+          return { ...h, cards: addCardToHand(h.cards, penaltyCard) };
         });
       }
     }
@@ -599,6 +636,7 @@ export function resolveReactionWindow(state: GameState): GameState {
     ...state,
     hands,
     drawPile,
+    discardPile,
     reactionWindowOpen: false,
     reactions: [],
   });
