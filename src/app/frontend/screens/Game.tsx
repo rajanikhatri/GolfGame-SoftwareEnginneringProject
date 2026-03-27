@@ -820,7 +820,7 @@ export default function Game() {
   }, [powerSelections]);
 
   const buildSelectablePowerCards = useCallback((playerIndex: number): GridSelection[] => {
-    if (phase !== 'power' || !pendingPower) return [];
+    if (phase !== 'power' || !pendingPower || !isMyTurn) return [];
     const player = players[playerIndex];
     if (!player) return [];
 
@@ -835,7 +835,12 @@ export default function Game() {
       const canSelect = (
         (pendingPower === '7' && playerIndex === 0 && !card.faceUp) ||
         (pendingPower === '8' && playerIndex !== 0 && !card.faceUp) ||
-        (pendingPower === '9' && !alreadySelected && !selectionsFull) ||
+        (
+          pendingPower === '9' &&
+          !alreadySelected &&
+          !selectionsFull &&
+          (!firstSelection || firstSelection.playerId !== player.id)
+        ) ||
         (
           pendingPower === '10' &&
           !alreadySelected &&
@@ -845,7 +850,7 @@ export default function Game() {
       );
       return canSelect ? [{ row: ri, col: ci }] : [];
     }));
-  }, [phase, pendingPower, players, powerSelections]);
+  }, [phase, pendingPower, players, powerSelections, isMyTurn]);
 
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
@@ -857,7 +862,7 @@ export default function Game() {
 
   // Called when player taps a card during power phase
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
-    if (!pendingPower) return;
+    if (!pendingPower || phase !== 'power' || !isMyTurn) return;
     const targetCard = players[playerIndex]?.cards[row]?.[col];
     if (!targetCard) return;
     const flatIndex = row * 2 + col;
@@ -905,6 +910,8 @@ export default function Game() {
     }
   }, [
     pendingPower,
+    phase,
+    isMyTurn,
     players,
     powerSelections,
     resolvePower,
@@ -1098,10 +1105,14 @@ export default function Game() {
             animation: 'pulse-glow 1.5s infinite',
           }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: 'white', fontFamily: 'Nunito' }}>
-            {pendingPower === '7' ? '👁 PEEK YOUR CARD'
-              : pendingPower === '8' ? '🕵️ SPY AN OPPONENT'
-              : pendingPower === '9' ? (powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'}` : '👀 SWAP OR KEEP')
-              : pendingPower === '10' ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : '🔀 PICK 1 MORE CARD')
+            {pendingPower === '7' ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
+              : pendingPower === '8' ? (isMyTurn ? '🕵️ SPY AN OPPONENT' : `🕵️ ${players[currentPlayerIndex]?.name} IS USING 8`)
+              : pendingPower === '9' ? (isMyTurn
+                ? (powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'}` : '👀 SWAP OR KEEP')
+                : `👀 ${players[currentPlayerIndex]?.name} IS USING 9`)
+              : pendingPower === '10' ? (isMyTurn
+                ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : '🔀 PICK 1 MORE CARD')
+                : `🔀 ${players[currentPlayerIndex]?.name} IS USING 10`)
               : isMyTurn ? '🎮 YOUR TURN'
               : `${players[currentPlayerIndex]?.name}'S TURN`}
           </span>
@@ -1260,7 +1271,7 @@ export default function Game() {
                   ⬆ TAP A CARD TO SWAP
                 </motion.div>
               )}
-              {pendingPower === '7' && (
+              {isMyTurn && pendingPower === '7' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1275,7 +1286,7 @@ export default function Game() {
                   👁 TAP A FACE-DOWN CARD
                 </motion.div>
               )}
-              {pendingPower === '9' && (
+              {isMyTurn && pendingPower === '9' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1290,7 +1301,7 @@ export default function Game() {
                   {powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'} TO PEEK` : '👀 SWAP OR KEEP'}
                 </motion.div>
               )}
-              {pendingPower === '10' && (
+              {isMyTurn && pendingPower === '10' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1421,12 +1432,13 @@ export default function Game() {
               fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
               fontFamily: 'Nunito', textAlign: 'center',
             }}>
-              {phase === 'power' && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
-              {phase === 'power' && pendingPower === '8' && '🕵️ Tap an opponent\'s card to spy, or skip'}
-              {phase === 'power' && pendingPower === '9' && powerSelections.length < 2 && '👀 Tap any 2 cards to peek at them'}
-              {phase === 'power' && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
-              {phase === 'power' && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
-              {phase === 'power' && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
+              {phase === 'power' && isMyTurn && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
+              {phase === 'power' && isMyTurn && pendingPower === '8' && '🕵️ Tap one opponent card to spy, or skip'}
+              {phase === 'power' && isMyTurn && pendingPower === '9' && powerSelections.length < 2 && '👀 Pick 2 cards from 2 different players'}
+              {phase === 'power' && isMyTurn && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
+              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
+              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
+              {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
               {reactionMode && (submittedReactionCard ? '✅ Reaction submitted' : '⚡ Reaction window: tap your matching card now')}

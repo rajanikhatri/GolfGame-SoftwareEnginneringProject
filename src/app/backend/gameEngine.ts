@@ -387,6 +387,9 @@ export function selectPower9Card(
 
   const current = state.power9Selection ?? [];
   if (current.length >= 2) return state;
+  if (current.some(selection => selection.playerId === targetPlayerId)) {
+    return state;
+  }
   if (current.some(selection => selection.playerId === targetPlayerId && selection.cardIndex === cardIndex)) {
     return state;
   }
