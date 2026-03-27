@@ -211,62 +211,194 @@ function DiscardLandingCue() {
   );
 }
 
-function CardHandCue({ mode }: { mode: 'tap' | 'swap' | 'draw' }) {
-  const isTap = mode === 'tap';
-  const isDraw = mode === 'draw';
+function CartoonGlovePointer({ mode }: { mode: 'draw' | 'swap' | 'power' }) {
+  const transform = mode === 'swap'
+    ? 'rotate(90 28 28)'
+    : mode === 'draw'
+    ? 'rotate(-8 28 28)'
+    : 'rotate(-2 28 28)';
+  const cuffMotion = mode === 'draw'
+    ? { y: [0, -0.9, 0], scaleX: [1, 1.03, 1] }
+    : mode === 'swap'
+    ? { y: [0, 0.5, 0], scaleX: [1, 1.02, 1] }
+    : { y: [0, -0.6, 0], scaleX: [1, 1.015, 1] };
+  const cuffDuration = mode === 'draw' ? 1.15 : mode === 'swap' ? 1.05 : 0.95;
+
+  return (
+    <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
+      <g transform={transform}>
+        <ellipse cx="28" cy="50" rx="12" ry="3.2" fill="rgba(0,0,0,0.16)" />
+        <motion.g
+          animate={cuffMotion}
+          transition={{
+            duration: cuffDuration,
+            repeat: Infinity,
+            repeatType: 'mirror',
+            ease: 'easeInOut',
+          }}
+        >
+          <rect x="17" y="4.8" width="22" height="8.6" rx="4.4" fill="#191A24" />
+          <rect x="15.8" y="11" width="24.4" height="9.4" rx="4.8" fill="#FAFCFF" stroke="#161616" strokeWidth="2.1" />
+          <circle cx="22.2" cy="15.7" r="1.1" fill="#161616" />
+          <circle cx="28" cy="15.7" r="1.1" fill="#161616" />
+          <circle cx="33.8" cy="15.7" r="1.1" fill="#161616" />
+        </motion.g>
+        <ellipse cx="28.5" cy="28.8" rx="12.1" ry="11.2" fill="#FFFFFF" stroke="#161616" strokeWidth="2.5" />
+        <ellipse cx="17.8" cy="31.5" rx="7.2" ry="8.9" fill="#FFFFFF" stroke="#161616" strokeWidth="2.3" transform="rotate(-27 17.8 31.5)" />
+        <rect x="18.7" y="18.1" width="6.1" height="15.6" rx="3.05" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
+        <rect x="24.3" y="16.6" width="6.4" height="16.7" rx="3.2" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
+        <rect x="30.2" y="18.2" width="6.1" height="15.4" rx="3.05" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
+        <rect x="24.2" y="25.2" width="9.8" height="19" rx="4.9" fill="#FFFFFF" stroke="#161616" strokeWidth="2.25" />
+        <ellipse cx="29.6" cy="46.2" rx="5.1" ry="4.7" fill="#FFFFFF" stroke="#161616" strokeWidth="2.2" />
+        <path d="M21.8 24c1.9 1.2 4 1.6 6 1" stroke="#161616" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity="0.72" />
+        <path d="M30.2 23.7c1.7 1 3.6 1.2 5.3 0.5" stroke="#161616" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity="0.64" />
+        <path d="M19.6 28.6c1.2 0.9 2.4 1.6 3.8 1.9" stroke="#161616" strokeWidth="1.45" strokeLinecap="round" fill="none" opacity="0.35" />
+        <path d="M22.5 18.4c2.5 -1.3 5.2 -1.5 8.1 -0.5" stroke="#FFFFFF" strokeWidth="1.35" strokeLinecap="round" fill="none" opacity="0.82" />
+      </g>
+    </svg>
+  );
+}
+
+function CardHandCue({ mode }: { mode: 'draw' | 'swap' | 'power' }) {
+  const config = mode === 'draw'
+    ? {
+        top: -24,
+        left: '58%',
+        border: 'rgba(66,165,245,0.35)',
+        glow: 'rgba(66,165,245,0.28)',
+        trail: 'rgba(129,212,250,0.6)',
+        animate: {
+          opacity: 1,
+          x: [-4, 3, -2],
+          y: [-16, -6, -13],
+          rotate: [-8, -1, -6],
+          scale: [1, 0.985, 1],
+        },
+        duration: 1.45,
+      }
+    : mode === 'swap'
+    ? {
+        top: -18,
+        left: '38%',
+        border: 'rgba(255,193,7,0.36)',
+        glow: 'rgba(255,193,7,0.28)',
+        trail: 'rgba(255,224,130,0.62)',
+        animate: {
+          opacity: 1,
+          x: [-8, 10, -3],
+          y: [-5, 1, -3],
+          rotate: [-10, 3, -7],
+          scale: [1, 1.015, 1],
+        },
+        duration: 1.35,
+      }
+    : {
+        top: -20,
+        left: '50%',
+        border: 'rgba(255,213,79,0.38)',
+        glow: 'rgba(255,213,79,0.26)',
+        trail: 'rgba(255,241,118,0.62)',
+        animate: {
+          opacity: 1,
+          x: [0, 0, 0],
+          y: [-10, -1, -8],
+          rotate: [-6, 0, -5],
+          scale: [1, 0.96, 1],
+        },
+        duration: 1.2,
+      };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -8, scale: 0.88 }}
-      animate={isDraw
-        ? {
-            opacity: 1,
-            x: [-6, 4, -2],
-            y: [-18, -6, -14],
-            rotate: [-10, -2, -8],
-            scale: [1, 0.97, 1],
-          }
-        : isTap
-        ? {
-            opacity: 1,
-            y: [-8, 2, -4],
-            rotate: [-8, 0, -8],
-            scale: [1, 0.95, 1],
-          }
-        : {
-            opacity: 1,
-            x: [-12, 10, -4],
-            y: [-6, 2, -3],
-            rotate: [-12, 4, -8],
-            scale: [1, 1.02, 1],
-          }}
+      animate={config.animate}
       exit={{ opacity: 0, y: -12, scale: 0.84 }}
       transition={{
-        duration: isDraw ? 1.05 : isTap ? 0.9 : 1,
+        duration: config.duration,
         repeat: Infinity,
         repeatType: 'loop',
         ease: 'easeInOut',
       }}
       style={{
         position: 'absolute',
-        top: isDraw ? -24 : -18,
-        left: isDraw ? '58%' : isTap ? '50%' : '38%',
+        top: config.top,
+        left: config.left,
         transform: 'translateX(-50%)',
         zIndex: 8,
         pointerEvents: 'none',
-        filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.28))',
+        filter: 'drop-shadow(0 7px 14px rgba(0,0,0,0.28))',
       }}
     >
+      <motion.div
+        animate={{
+          opacity: [0.18, 0.34, 0.18],
+          scale: [0.92, 1.1, 0.92],
+        }}
+        transition={{
+          duration: config.duration,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+        style={{
+          position: 'absolute',
+          inset: -8,
+          borderRadius: 999,
+          background: `radial-gradient(circle, ${config.glow} 0%, transparent 72%)`,
+          filter: 'blur(7px)',
+        }}
+      />
+      {[0, 1].map(index => (
+        <motion.div
+          key={index}
+          animate={mode === 'swap'
+            ? {
+                opacity: [0, 0.42, 0],
+                x: [-8 - index * 7, 6 - index * 7, 14 - index * 7],
+                y: [7 - index * 2, 3 - index * 2, 0 - index * 2],
+                scale: [0.65, 1, 1.15],
+              }
+            : mode === 'draw'
+            ? {
+                opacity: [0, 0.4, 0],
+                x: [6 + index * 3, 2 + index * 2, -1 + index],
+                y: [16 + index * 3, 8 + index * 2, 2 + index],
+                scale: [0.6, 0.95, 1.12],
+              }
+            : {
+                opacity: [0, 0.36, 0],
+                x: [0, 0, 0],
+                y: [10 + index * 4, 4 + index * 3, -1 + index],
+                scale: [0.62, 0.94, 1.06],
+              }}
+          transition={{
+            duration: config.duration,
+            repeat: Infinity,
+            ease: 'easeOut',
+            delay: index * 0.18,
+          }}
+          style={{
+            position: 'absolute',
+            width: 10 - index * 2,
+            height: 10 - index * 2,
+            borderRadius: '50%',
+            background: config.trail,
+            filter: 'blur(1px)',
+            left: mode === 'swap' ? 10 : '50%',
+            top: mode === 'draw' ? 18 : 14,
+            marginLeft: mode === 'swap' ? 0 : -5 + index,
+          }}
+        />
+      ))}
       <div style={{
-        background: 'rgba(255,255,255,0.97)',
-        border: '2px solid rgba(30,136,229,0.3)',
-        borderRadius: 999,
-        padding: isDraw ? '3px 9px' : isTap ? '2px 8px' : '2px 10px',
-        fontSize: isDraw ? 25 : isTap ? 24 : 22,
-        lineHeight: 1,
-        boxShadow: '0 4px 12px rgba(255,255,255,0.25)',
+        position: 'relative',
+        width: 52,
+        height: 52,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: `0 8px 20px ${config.border}`,
       }}>
-        {isDraw ? '👇' : isTap ? '👇' : '👉'}
+        <CartoonGlovePointer mode={mode} />
       </div>
     </motion.div>
   );
@@ -409,8 +541,8 @@ function PlayerCardGrid({
                     SENT
                   </div>
                 )}
-                {isSwapTargetGuide && <CardHandCue mode="tap" />}
-                {isPowerSelected && <CardHandCue mode="tap" />}
+                {isSwapTargetGuide && <CardHandCue mode="swap" />}
+                {isPowerSelected && <CardHandCue mode="power" />}
                 {isSwapCue && <CardHandCue mode="swap" />}
                 {/* Column match indicator — only for your own cards */}
                 {ri === 0 && isYou && player.cards[1]?.[ci] &&
