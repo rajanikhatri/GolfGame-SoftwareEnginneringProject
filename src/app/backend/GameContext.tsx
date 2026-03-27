@@ -906,7 +906,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const usePower10Action = useCallback((card1: PowerCardSelection, card2: PowerCardSelection) => {
     if (gameMode === 'multiplayer') {
-      syncUsePower10(roomCodeRef.current, card1, card2).catch(console.error);
+      syncUsePower10(
+        roomCodeRef.current,
+        { playerId: card1.playerId, cardIndex: card1.cardFlatIndex },
+        { playerId: card2.playerId, cardIndex: card2.cardFlatIndex },
+      ).catch(console.error);
       return;
     }
 
