@@ -181,6 +181,36 @@ function AIThinkingDots() {
   );
 }
 
+function DiscardLandingCue() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.92 }}
+      style={{
+        position: 'absolute',
+        top: -18,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'linear-gradient(135deg, rgba(255,193,7,0.96), rgba(255,152,0,0.96))',
+        border: '2px solid rgba(255,255,255,0.7)',
+        borderRadius: 999,
+        padding: '4px 12px',
+        fontSize: 10,
+        fontWeight: 900,
+        color: '#3E2723',
+        fontFamily: 'Nunito',
+        letterSpacing: '0.04em',
+        whiteSpace: 'nowrap',
+        zIndex: 12,
+        boxShadow: '0 8px 20px rgba(255,152,0,0.35)',
+      }}
+    >
+      🤚 DISCARD HIDDEN HERE
+    </motion.div>
+  );
+}
+
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
@@ -214,11 +244,9 @@ function PlayerCardGrid({
             const faceDown = isYou ? !displayCard?.faceUp : !isPeeked;
 
             // Power click targets:
-            // - card 7 (peek self): own face-down cards only
-            // - card 8 (peek opponent): all opponent cards
-            const isPowerTarget = powerSelectable && (
-              isYou ? !card?.faceUp : true
-            );
+            // - card 7 (peek self): own hidden cards only
+            // - card 8 (peek opponent): opponent hidden cards only
+            const isPowerTarget = Boolean(powerSelectable && card && !card.faceUp);
             const isReactionSelected = reactionSelected?.row === ri && reactionSelected?.col === ci;
             const isReactionTarget = Boolean(reactionSelectable && isYou && card && !reactionSelected);
             const isInteractive = Boolean((isYou && selectedForSwap) || isPowerTarget || isReactionTarget);
@@ -331,7 +359,7 @@ function PlayerCardGrid({
 // ─── Player Panel ─────────────────────────────────────────────────────────────
 function PlayerPanelComp({
   player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking, score,
-  revealCard, powerSelectable, onPowerClick, reactionSelectable, onReactionClick, reactionSelected,
+  revealCard, powerSelectable, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue,
 }: {
   player: Player;
   isActive: boolean;
@@ -347,6 +375,7 @@ function PlayerPanelComp({
   reactionSelectable?: boolean;
   onReactionClick?: (row: number, col: number) => void;
   reactionSelected?: { row: number; col: number } | null;
+  discardLandingCue?: boolean;
 }) {
   const isHorizontal = position === 'top' || position === 'bottom';
 
@@ -415,7 +444,11 @@ function PlayerPanelComp({
         borderRadius: 12,
         padding: powerSelectable ? 6 : 0,
         transition: 'outline 0.2s',
+        position: 'relative',
       }}>
+        <AnimatePresence>
+          {discardLandingCue && <DiscardLandingCue />}
+        </AnimatePresence>
         <PlayerCardGrid
           player={player}
           isActive={isActive}
@@ -608,6 +641,13 @@ function PileArea({
   );
 }
 
+function countCardsInHand(player: Player): number {
+  return player.cards.reduce(
+    (total, row) => total + row.filter(card => card !== null).length,
+    0,
+  );
+}
+
 // ─── Main Game Screen ─────────────────────────────────────────────────────────
 export default function Game() {
   const navigate = useNavigate();
@@ -637,7 +677,11 @@ export default function Game() {
     playerIndex: number; row: number; col: number;
   } | null>(null);
   const [submittedReactionCard, setSubmittedReactionCard] = useState<{ row: number; col: number } | null>(null);
+  const [discardLandingPlayerIds, setDiscardLandingPlayerIds] = useState<string[]>([]);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const discardLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevPlayersRef = useRef<Player[]>([]);
+  const prevMatchWindowRef = useRef(matchWindowActive);
 
   // Redirect if no game
   useEffect(() => {
@@ -680,6 +724,38 @@ export default function Game() {
     }
   }, [matchWindowActive]);
 
+  useEffect(() => {
+    const previousPlayers = prevPlayersRef.current;
+    const previousMatchWindow = prevMatchWindowRef.current;
+
+    if (previousMatchWindow && !matchWindowActive && previousPlayers.length > 0 && players.length > 0) {
+      const receivingPlayers = players
+        .filter(player => {
+          const previousPlayer = previousPlayers.find(prev => prev.id === player.id);
+          const previousCount = previousPlayer ? countCardsInHand(previousPlayer) : 0;
+          return countCardsInHand(player) > previousCount;
+        })
+        .map(player => player.id);
+
+      if (discardLandingTimerRef.current) clearTimeout(discardLandingTimerRef.current);
+      if (receivingPlayers.length > 0) {
+        setDiscardLandingPlayerIds(receivingPlayers);
+        discardLandingTimerRef.current = setTimeout(() => {
+          setDiscardLandingPlayerIds([]);
+        }, 1800);
+      } else {
+        setDiscardLandingPlayerIds([]);
+      }
+    }
+
+    prevPlayersRef.current = players;
+    prevMatchWindowRef.current = matchWindowActive;
+  }, [players, matchWindowActive]);
+
+  useEffect(() => () => {
+    if (discardLandingTimerRef.current) clearTimeout(discardLandingTimerRef.current);
+  }, []);
+
   const handleCardClick = useCallback((row: number, col: number) => {
     if (phase === 'swap' && isMyTurn) {
       swapCard(row, col);
@@ -697,8 +773,10 @@ export default function Game() {
   // Called when player taps a card during power phase (powers 7 & 8 only)
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
     if (!pendingPower) return;
-    if (pendingPower === '7' && playerIndex !== 0) return;
-    if (pendingPower === '8' && playerIndex === 0) return;
+    const targetCard = players[playerIndex]?.cards[row]?.[col];
+    if (!targetCard) return;
+    if (pendingPower === '7' && (playerIndex !== 0 || targetCard.faceUp)) return;
+    if (pendingPower === '8' && (playerIndex === 0 || targetCard.faceUp)) return;
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
 
     setPeekedCard({ playerIndex, row, col });
@@ -742,7 +820,7 @@ export default function Game() {
   // Power mode derived from pendingPower
   const powerMode = pendingPower === '7' ? 'peek_self'
     : pendingPower === '8' ? 'peek_opponent' : null;
-  const reactionMode = matchWindowActive;
+  const reactionMode = matchWindowActive && !isMyTurn;
 
   return (
     <div
@@ -951,6 +1029,7 @@ export default function Game() {
               revealCard={peekedCard?.playerIndex === 2 ? { row: peekedCard.row, col: peekedCard.col } : null}
               powerSelectable={powerMode === 'peek_opponent'}
               onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
+              discardLandingCue={discardLandingPlayerIds.includes(p3.id)}
             />
           )}
         </div>
@@ -968,6 +1047,7 @@ export default function Game() {
               revealCard={peekedCard?.playerIndex === 1 ? { row: peekedCard.row, col: peekedCard.col } : null}
               powerSelectable={powerMode === 'peek_opponent'}
               onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              discardLandingCue={discardLandingPlayerIds.includes(p2.id)}
             />
           )}
         </div>
@@ -1001,6 +1081,7 @@ export default function Game() {
               revealCard={peekedCard?.playerIndex === 3 ? { row: peekedCard.row, col: peekedCard.col } : null}
               powerSelectable={powerMode === 'peek_opponent'}
               onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
+              discardLandingCue={discardLandingPlayerIds.includes(p4.id)}
             />
           )}
         </div>
@@ -1009,6 +1090,7 @@ export default function Game() {
         <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           {/* Player hand */}
           <div style={{
+            position: 'relative',
             background: isMyTurn
               ? `linear-gradient(135deg, ${p1.color}20, ${p1.color}08)`
               : 'rgba(255,255,255,0.04)',
@@ -1018,6 +1100,9 @@ export default function Game() {
             transition: 'all 0.3s ease',
             animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
           }}>
+            <AnimatePresence>
+              {discardLandingPlayerIds.includes(p1.id) && <DiscardLandingCue />}
+            </AnimatePresence>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
             }}>

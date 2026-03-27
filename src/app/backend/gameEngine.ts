@@ -197,7 +197,8 @@ function cloneCardForPenalty(card: Card, ownerId: string, timestamp: number): Ca
   return {
     ...card,
     id: `${card.id}-penalty-${ownerId}-${timestamp}`,
-    faceUp: true,
+    // Once the exposed discard is taken into a hand, it should follow hand privacy again.
+    faceUp: false,
   };
 }
 
@@ -352,8 +353,8 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
 export function usePower7(state: GameState, playerId: string, cardIndex: number): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '7') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  const hand = state.hands.find(entry => entry.playerId === playerId);
-  if (!hand?.cards[cardIndex]) return state;
+  const targetCard = state.hands.find(entry => entry.playerId === playerId)?.cards[cardIndex];
+  if (!targetCard || targetCard.faceUp) return state;
   return discardActivePowerCard(state, playerId);
 }
 
@@ -367,8 +368,8 @@ export function usePower8(
   if (state.phase !== 'power' || state.pendingPower !== '8') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
   if (targetPlayerId === actingPlayerId) return state;
-  const hand = state.hands.find(entry => entry.playerId === targetPlayerId);
-  if (!hand?.cards[cardIndex]) return state;
+  const targetCard = state.hands.find(entry => entry.playerId === targetPlayerId)?.cards[cardIndex];
+  if (!targetCard || targetCard.faceUp) return state;
   return discardActivePowerCard(state, actingPlayerId);
 }
 
@@ -578,10 +579,22 @@ export function resolveReactionWindow(state: GameState): GameState {
     const hand = state.hands.find(entry => entry.playerId === reaction.playerId);
     return hand?.cards[reaction.cardIndex]?.value === discardedValue;
   }) ?? null;
+  const isWinningReaction = (reaction: ReactionEntry) => (
+    winningReaction !== null &&
+    reaction.playerId === winningReaction.playerId &&
+    reaction.cardIndex === winningReaction.cardIndex &&
+    reaction.timestamp === winningReaction.timestamp
+  );
 
   let hands = state.hands;
   let drawPile = state.drawPile;
   let discardPile = state.discardPile;
+  if (
+    sorted.some(reaction => !isWinningReaction(reaction)) &&
+    discardPile[0]?.id === state.lastDiscardedCard.id
+  ) {
+    discardPile = discardPile.slice(1);
+  }
 
   sorted.forEach((reaction) => {
     const hand = hands.find(h => h.playerId === reaction.playerId);
@@ -589,12 +602,7 @@ export function resolveReactionWindow(state: GameState): GameState {
 
     const reactedCard = hand.cards[reaction.cardIndex];
 
-    if (
-      winningReaction &&
-      reaction.playerId === winningReaction.playerId &&
-      reaction.cardIndex === winningReaction.cardIndex &&
-      reaction.timestamp === winningReaction.timestamp
-    ) {
+    if (isWinningReaction(reaction)) {
       // Fastest correct reaction — card is successfully discarded
       hands = hands.map(h => {
         if (h.playerId !== reaction.playerId) return h;

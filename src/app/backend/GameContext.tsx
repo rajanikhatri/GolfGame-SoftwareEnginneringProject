@@ -215,7 +215,7 @@ function clonePenaltyCard(card: Card, ownerId: string): Card {
   return {
     ...card,
     id: `${card.id}-penalty-${ownerId}-${Math.random().toFixed(6)}`,
-    faceUp: true,
+    faceUp: false,
   };
 }
 
@@ -604,7 +604,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       let toDiscard: Card;
       if (swapRow !== -1) {
         const old = newCards[swapRow][swapCol];
-        newCards[swapRow][swapCol] = { ...drawn, faceUp: true };
+        newCards[swapRow][swapCol] = { ...drawn, faceUp: false };
         toDiscard = old ? { ...old, faceUp: true } : drawn;
       } else {
         toDiscard = drawn;
@@ -720,7 +720,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const player = { ...updated[0] };
     const newCards = player.cards.map(r => [...r]);
     const oldCard = newCards[row][col];
-    newCards[row][col] = { ...drawnCard, faceUp: true };
+    newCards[row][col] = { ...drawnCard, faceUp: false };
     player.cards = newCards;
     updated[0] = player;
     const toDiscard = oldCard ? { ...oldCard, faceUp: true } : drawnCard;
@@ -767,12 +767,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     if (selectedCard.value === lastPlayedCard.value) {
       newCards[row][col] = null;
+      setDiscardPile(prev => [{ ...selectedCard, faceUp: true }, ...prev]);
     } else {
       const reactedPlayerId = player.id;
       const exposedDiscard = clonePenaltyCard(lastPlayedCard, reactedPlayerId);
+      let nextDiscardPile = discardPileRef.current.length > 0
+        ? discardPileRef.current.slice(1)
+        : [];
       let penalizedCards = addCardToGrid(newCards, exposedDiscard);
       let pile = [...drawPileRef.current];
-      let nextDiscardPile = [...discardPileRef.current];
+      setDiscardPile(nextDiscardPile);
       if (pile.length === 0) {
         const [keepTop, ...rest] = nextDiscardPile;
         if (rest.length > 0) {
