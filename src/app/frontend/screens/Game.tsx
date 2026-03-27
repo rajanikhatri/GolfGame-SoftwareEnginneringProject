@@ -826,6 +826,7 @@ export default function Game() {
 
     const firstSelection = powerSelections[0] ?? null;
     const selectionsFull = powerSelections.length >= 2;
+    const singlePeekLocked = (pendingPower === '7' || pendingPower === '8') && peekedCards.length > 0;
 
     return player.cards.flatMap((row, ri) => row.flatMap((card, ci) => {
       if (!card) return [];
@@ -833,8 +834,8 @@ export default function Game() {
         selection.playerIndex === playerIndex && selection.row === ri && selection.col === ci
       );
       const canSelect = (
-        (pendingPower === '7' && playerIndex === 0 && !card.faceUp) ||
-        (pendingPower === '8' && playerIndex !== 0 && !card.faceUp) ||
+        (pendingPower === '7' && !singlePeekLocked && playerIndex === 0 && !card.faceUp) ||
+        (pendingPower === '8' && !singlePeekLocked && playerIndex !== 0 && !card.faceUp) ||
         (
           pendingPower === '9' &&
           !alreadySelected &&
@@ -850,7 +851,7 @@ export default function Game() {
       );
       return canSelect ? [{ row: ri, col: ci }] : [];
     }));
-  }, [phase, pendingPower, players, powerSelections, isMyTurn]);
+  }, [phase, pendingPower, players, powerSelections, isMyTurn, peekedCards]);
 
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
@@ -870,6 +871,7 @@ export default function Game() {
     const selection: PowerSelection = { playerIndex, playerId: targetPlayerId, row, col, cardFlatIndex: flatIndex };
 
     if (pendingPower === '7' || pendingPower === '8') {
+      if (peekedCards.length > 0) return;
       if (pendingPower === '7' && (playerIndex !== 0 || targetCard.faceUp)) return;
       if (pendingPower === '8' && (playerIndex === 0 || targetCard.faceUp)) return;
       if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
@@ -912,6 +914,7 @@ export default function Game() {
     pendingPower,
     phase,
     isMyTurn,
+    peekedCards,
     players,
     powerSelections,
     resolvePower,
@@ -1087,7 +1090,7 @@ export default function Game() {
             <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
             <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>8=🕵️OPP</span>
             <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>K=-2</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>K♠/♣=-2</span>
             <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
             <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>★=-1</span>
           </div>
@@ -1111,7 +1114,7 @@ export default function Game() {
                 ? (powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'}` : '👀 SWAP OR KEEP')
                 : `👀 ${players[currentPlayerIndex]?.name} IS USING 9`)
               : pendingPower === '10' ? (isMyTurn
-                ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : '🔀 PICK 1 MORE CARD')
+                ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : powerSelections.length === 1 ? '🔀 PICK 1 MORE CARD' : '🔀 SWAP SENT')
                 : `🔀 ${players[currentPlayerIndex]?.name} IS USING 10`)
               : isMyTurn ? '🎮 YOUR TURN'
               : `${players[currentPlayerIndex]?.name}'S TURN`}
@@ -1313,7 +1316,11 @@ export default function Game() {
                     fontFamily: 'Nunito',
                   }}
                 >
-                  {powerSelections.length === 0 ? '🔀 TAP FIRST CARD TO SWAP' : '🔀 TAP A CARD FROM ANOTHER PLAYER'}
+                  {powerSelections.length === 0
+                    ? '🔀 TAP FIRST CARD TO SWAP'
+                    : powerSelections.length === 1
+                    ? '🔀 TAP A CARD FROM ANOTHER PLAYER'
+                    : '🔀 BLIND SWAP SENT'}
                 </motion.div>
               )}
               {reactionMode && (
@@ -1377,7 +1384,10 @@ export default function Game() {
             )}
 
             {/* Skip power button — available for all power ranks */}
-            {phase === 'power' && isMyTurn && !(pendingPower === '9' && powerSelections.length > 0) && (
+            {phase === 'power' && isMyTurn &&
+              !((pendingPower === '7' || pendingPower === '8') && peekedCards.length > 0) &&
+              !(pendingPower === '9' && powerSelections.length > 0) &&
+              !(pendingPower === '10' && powerSelections.length === 2) && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1438,6 +1448,7 @@ export default function Game() {
               {phase === 'power' && isMyTurn && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
               {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
               {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
+              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 2 && '🔀 Blind swap sent. Waiting for game state update...'}
               {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}

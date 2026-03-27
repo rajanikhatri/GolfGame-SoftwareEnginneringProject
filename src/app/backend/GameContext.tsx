@@ -21,6 +21,7 @@ import {
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
+  getCardValue,
   type GameState,
   type GamePhase as EnginePhase,
 } from './gameEngine';
@@ -165,8 +166,14 @@ const LOBBY_MESSAGES: ChatMessage[] = [
 function createDeck(): Card[] {
   const deck: Card[] = [];
   SUITS.forEach(suit => {
-    RANKS.forEach(({ rank, value }) => {
-      deck.push({ id: `${suit}-${rank}-${Math.random().toFixed(6)}`, value, suit, rank, faceUp: false });
+    RANKS.forEach(({ rank }) => {
+      deck.push({
+        id: `${suit}-${rank}-${Math.random().toFixed(6)}`,
+        value: getCardValue(rank, suit),
+        suit,
+        rank,
+        faceUp: false,
+      });
     });
   });
   deck.push({ id: `joker-1-${Math.random()}`, value: -1, suit: 'joker', rank: '★', faceUp: false });

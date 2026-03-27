@@ -61,6 +61,7 @@ export function GameCard({
 
   const isRed = card?.suit === 'hearts' || card?.suit === 'diamonds';
   const isJoker = card?.suit === 'joker';
+  const isBlackKing = card?.rank === 'K' && (card?.suit === 'spades' || card?.suit === 'clubs');
 
   const containerStyle: React.CSSProperties = {
     width: rotated ? dims.height : dims.width,
@@ -216,8 +217,8 @@ export function GameCard({
         }} />
       )}
 
-      {/* King special - show "-2" value badge */}
-      {card.rank === 'K' && (
+      {/* Black king special - show "-2" value badge */}
+      {isBlackKing && (
         <div style={{
           position: 'absolute', top: '50%', right: 4,
           transform: 'translateY(-50%)',
