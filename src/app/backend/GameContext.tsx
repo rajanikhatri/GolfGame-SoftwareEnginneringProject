@@ -8,6 +8,9 @@ import {
   syncSkipPower,
   syncUsePower7,
   syncUsePower8,
+  syncSelectPower9Card,
+  syncConfirmPower9,
+  syncUsePower10,
   syncSwapCard,
   syncDiscardDrawn,
   syncReaction,
@@ -71,6 +74,11 @@ export interface SerializedGameState {
   playerHands: { id: string; name: string; cards: (Card | null)[] }[];
 }
 
+export interface PowerCardSelection {
+  playerId: string;
+  cardFlatIndex: number;
+}
+
 interface GameContextType {
   gameMode: 'multiplayer' | 'solo' | null;
   setGameMode: (mode: 'multiplayer' | 'solo') => void;
@@ -119,6 +127,9 @@ interface GameContextType {
   endPeek: () => void;
   resetGame: () => void;
   resolvePower: (targetPlayerId?: string, cardFlatIndex?: number) => void;
+  selectPower9Card: (targetPlayerId: string, cardFlatIndex: number) => void;
+  confirmPower9: (doSwap: boolean, selections: PowerCardSelection[]) => void;
+  usePower10: (card1: PowerCardSelection, card2: PowerCardSelection) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -217,6 +228,10 @@ function clonePenaltyCard(card: Card, ownerId: string): Card {
     id: `${card.id}-penalty-${ownerId}-${Math.random().toFixed(6)}`,
     faceUp: false,
   };
+}
+
+function flatIndexToRowCol(flatIndex: number): { row: number; col: number } {
+  return { row: Math.floor(flatIndex / 2), col: flatIndex % 2 };
 }
 
 // Convert engine GameState → local Player[] (reordered so myPlayerId is first)
@@ -805,6 +820,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     soloAdvanceTurn(currentPlayerIndex, currentPlayers, finalRoundRef.current, knockedByRef.current);
   }, [gameMode, matchWindowActive, currentPlayerIndex, lastPlayedCard, soloAdvanceTurn]);
 
+  const finishSoloPower = useCallback((updatedPlayers?: Player[]) => {
+    if (!drawnCard) {
+      setPendingPower(null);
+      setPhase('swap');
+      return;
+    }
+
+    const playersAfterPower = updatedPlayers ?? playersRef.current;
+    const discarded = { ...drawnCard, faceUp: true };
+    setPendingPower(null);
+    setLastPlayedCard(discarded);
+    setDiscardPile(prev => [discarded, ...prev]);
+    setDrawnCard(null);
+    setPhase('match_window');
+    soloShowMatchWindow(() => soloAdvanceTurn(0, playersAfterPower, finalRoundRef.current, knockedByRef.current));
+  }, [drawnCard, soloShowMatchWindow, soloAdvanceTurn]);
+
   const resolvePower = useCallback((targetPlayerId?: string, cardFlatIndex?: number) => {
     if (gameMode === 'multiplayer') {
       // Sync the power action to Firestore so the engine applies the correct state change.
@@ -823,17 +855,74 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setPhase('swap');
       return;
     }
-    // Solo: once the power is used, discard the power card immediately and continue
-    // through the normal reaction/turn-advance flow.
-    const discarded = { ...drawnCard, faceUp: true };
-    setPendingPower(null);
-    setLastPlayedCard(discarded);
-    setDiscardPile(prev => [discarded, ...prev]);
-    setDrawnCard(null);
-    setPhase('match_window');
-    const currentPlayers = playersRef.current;
-    soloShowMatchWindow(() => soloAdvanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
-  }, [gameMode, pendingPower, drawnCard, soloShowMatchWindow, soloAdvanceTurn]);
+    finishSoloPower();
+  }, [gameMode, pendingPower, drawnCard, finishSoloPower]);
+
+  const selectPower9Card = useCallback((targetPlayerId: string, cardFlatIndex: number) => {
+    if (gameMode === 'multiplayer') {
+      syncSelectPower9Card(roomCodeRef.current, targetPlayerId, cardFlatIndex).catch(console.error);
+    }
+  }, [gameMode]);
+
+  const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
+    if (gameMode === 'multiplayer') {
+      syncConfirmPower9(roomCodeRef.current, doSwap).catch(console.error);
+      return;
+    }
+
+    if (selections.length < 2) return;
+
+    const currentPlayers = [...playersRef.current];
+    if (doSwap) {
+      const [sel1, sel2] = selections;
+      const { row: row1, col: col1 } = flatIndexToRowCol(sel1.cardFlatIndex);
+      const { row: row2, col: col2 } = flatIndexToRowCol(sel2.cardFlatIndex);
+      const idx1 = currentPlayers.findIndex(player => player.id === sel1.playerId);
+      const idx2 = currentPlayers.findIndex(player => player.id === sel2.playerId);
+
+      if (idx1 !== -1 && idx2 !== -1) {
+        const player1 = { ...currentPlayers[idx1], cards: currentPlayers[idx1].cards.map(row => [...row]) };
+        const player2 = { ...currentPlayers[idx2], cards: currentPlayers[idx2].cards.map(row => [...row]) };
+        const card1 = player1.cards[row1]?.[col1] ?? null;
+        const card2 = player2.cards[row2]?.[col2] ?? null;
+
+        player1.cards[row1][col1] = card2 ? { ...card2, faceUp: false } : null;
+        player2.cards[row2][col2] = card1 ? { ...card1, faceUp: false } : null;
+        currentPlayers[idx1] = player1;
+        currentPlayers[idx2] = player2;
+        setPlayers(currentPlayers);
+      }
+    }
+
+    finishSoloPower(currentPlayers);
+  }, [gameMode, finishSoloPower]);
+
+  const usePower10Action = useCallback((card1: PowerCardSelection, card2: PowerCardSelection) => {
+    if (gameMode === 'multiplayer') {
+      syncUsePower10(roomCodeRef.current, card1, card2).catch(console.error);
+      return;
+    }
+
+    const currentPlayers = [...playersRef.current];
+    const { row: row1, col: col1 } = flatIndexToRowCol(card1.cardFlatIndex);
+    const { row: row2, col: col2 } = flatIndexToRowCol(card2.cardFlatIndex);
+    const idx1 = currentPlayers.findIndex(player => player.id === card1.playerId);
+    const idx2 = currentPlayers.findIndex(player => player.id === card2.playerId);
+    if (idx1 === -1 || idx2 === -1 || idx1 === idx2) return;
+
+    const player1 = { ...currentPlayers[idx1], cards: currentPlayers[idx1].cards.map(row => [...row]) };
+    const player2 = { ...currentPlayers[idx2], cards: currentPlayers[idx2].cards.map(row => [...row]) };
+    const source1 = player1.cards[row1]?.[col1] ?? null;
+    const source2 = player2.cards[row2]?.[col2] ?? null;
+    if (!source1 || !source2) return;
+
+    player1.cards[row1][col1] = { ...source2, faceUp: false };
+    player2.cards[row2][col2] = { ...source1, faceUp: false };
+    currentPlayers[idx1] = player1;
+    currentPlayers[idx2] = player2;
+    setPlayers(currentPlayers);
+    finishSoloPower(currentPlayers);
+  }, [gameMode, finishSoloPower]);
 
   const knockAction = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -911,6 +1000,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       skipPower: skipPowerAction,
       endPeek,
       sendChat, addChatMessage, resetGame, resolvePower,
+      selectPower9Card,
+      confirmPower9: confirmPower9Action,
+      usePower10: usePower10Action,
     }}>
       {children}
     </GameContext.Provider>

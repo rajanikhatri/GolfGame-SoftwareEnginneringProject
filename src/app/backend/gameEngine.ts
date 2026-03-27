@@ -382,27 +382,17 @@ export function selectPower9Card(
 ): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '9') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
+  const targetHand = state.hands.find(hand => hand.playerId === targetPlayerId);
+  if (!targetHand?.cards[cardIndex]) return state;
 
   const current = state.power9Selection ?? [];
   if (current.length >= 2) return state;
+  if (current.some(selection => selection.playerId === targetPlayerId && selection.cardIndex === cardIndex)) {
+    return state;
+  }
 
   const selection = [...current, { playerId: targetPlayerId, cardIndex }];
-
-  // Reveal selected cards
-  const hands = state.hands.map(hand => {
-    const sel = selection.find(s => s.playerId === hand.playerId && s.cardIndex !== undefined);
-    if (!sel) return hand;
-    const relevantSelections = selection.filter(s => s.playerId === hand.playerId);
-    return {
-      ...hand,
-      cards: hand.cards.map((c, i) => {
-        const isSelected = relevantSelections.some(s => s.cardIndex === i);
-        return isSelected && c ? { ...c, faceUp: true } : c;
-      }),
-    };
-  });
-
-  return { ...state, hands, power9Selection: selection };
+  return { ...state, power9Selection: selection };
 }
 
 // Power 9: after seeing both cards, optionally swap them
@@ -465,6 +455,9 @@ export function usePower10(
 ): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '10') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
+  if (card1.playerId === card2.playerId) {
+    return state;
+  }
 
   const hand1 = state.hands.find(h => h.playerId === card1.playerId);
   const hand2 = state.hands.find(h => h.playerId === card2.playerId);
@@ -472,6 +465,7 @@ export function usePower10(
 
   const c1 = hand1.cards[card1.cardIndex];
   const c2 = hand2.cards[card2.cardIndex];
+  if (!c1 || !c2) return state;
 
   const hands = state.hands.map(hand => {
     if (hand.playerId === card1.playerId) {
