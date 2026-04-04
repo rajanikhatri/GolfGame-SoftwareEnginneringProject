@@ -436,7 +436,7 @@ function PlayerCardGrid({
   peekPhase?: boolean;
   onPowerClick?: (row: number, col: number) => void;
   reactionSelectable?: boolean;
-  onReactionClick?: (row: number, col: number) => void;
+  onReactionClick?: (playerId: string, row: number, col: number) => void;
   reactionSelected?: { row: number; col: number } | null;
 }) {
   return (
@@ -460,7 +460,7 @@ function PlayerCardGrid({
             const isPowerSelected = Boolean(powerSelectedCards?.some(selection => selection.row === ri && selection.col === ci));
             const isSwapCue = Boolean(swapCueCards?.some(selection => selection.row === ri && selection.col === ci));
             const isReactionSelected = reactionSelected?.row === ri && reactionSelected?.col === ci;
-            const isReactionTarget = Boolean(reactionSelectable && isYou && card && !reactionSelected);
+            const isReactionTarget = Boolean(reactionSelectable && card && !reactionSelected);
             const isSwapTargetGuide = Boolean(isYou && selectedForSwap && card && !isPowerTarget && !isReactionTarget);
             const isInteractive = Boolean((isYou && selectedForSwap) || isPowerTarget || isReactionTarget);
 
@@ -468,7 +468,7 @@ function PlayerCardGrid({
               if (isPowerTarget && onPowerClick) {
                 onPowerClick(ri, ci);
               } else if (isReactionTarget && onReactionClick) {
-                onReactionClick(ri, ci);
+                onReactionClick(player.id, ri, ci);
               } else if (!powerSelectableCards || powerSelectableCards.length === 0) {
                 onCardClick?.(ri, ci);
               }
@@ -594,7 +594,7 @@ function PlayerPanelComp({
   swapCueCards?: GridSelection[];
   onPowerClick?: (row: number, col: number) => void;
   reactionSelectable?: boolean;
-  onReactionClick?: (row: number, col: number) => void;
+  onReactionClick?: (playerId: string, row: number, col: number) => void;
   reactionSelected?: { row: number; col: number } | null;
   discardLandingCue?: boolean;
 }) {
@@ -880,7 +880,7 @@ export default function Game() {
   const navigate = useNavigate();
   const {
     players, drawPile, discardPile, currentPlayerIndex,
-    isMyTurn,
+    isMyTurn, giveAwayCardAction,
     drawnCard, phase, finalRound, knockedBy,
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, reactToDiscard, knock,
@@ -1039,12 +1039,16 @@ export default function Game() {
       swapCard(row, col);
       setSwapMode(false);
     }
+    if (phase === 'giveaway' && isMyTurn) {
+      giveAwayCardAction(row, col);
+      return;
+    }
   }, [phase, isMyTurn, swapCard]);
 
-  const handleReactionCardClick = useCallback((row: number, col: number) => {
+  const handleReactionCardClick = useCallback((targetPlayerId: string, row: number, col: number) => {
     if (matchWindowActive) {
       setSubmittedReactionCard({ row, col });
-      reactToDiscard(row, col);
+      reactToDiscard(targetPlayerId, row, col);
     }
   }, [matchWindowActive, reactToDiscard]);
 
@@ -1677,7 +1681,7 @@ export default function Game() {
               </>
             )}
 
-            {!finalRound && isMyTurn && phase !== 'power' && (
+            {!finalRound && isMyTurn && phase === 'draw' && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 className="arcade-btn arcade-btn-red"

@@ -57,7 +57,8 @@ export function GameCard({
   rotated = false,
 }: GameCardProps) {
   const dims = SIZES[size];
-  const showBack = faceDown || !card?.faceUp;
+  const isEmptySlot = !card;
+  const showBack = !isEmptySlot && (faceDown || !card.faceUp);
 
   const isRed = card?.suit === 'hearts' || card?.suit === 'diamonds';
   const isJoker = card?.suit === 'joker';
@@ -82,30 +83,45 @@ export function GameCard({
     ...style,
   };
 
-  if (showBack) {
-    return (
-      <div
-        style={containerStyle}
-        className={`game-card game-card-back ${className}`}
-        onClick={onClick}
-      >
-        <div style={{
-          position: 'absolute', inset: 6,
-          border: '1.5px solid rgba(255,255,255,0.2)',
-          borderRadius: dims.borderRadius - 4,
-          background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 2px, transparent 2px, transparent 8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{ fontSize: dims.fontSize * 0.7, opacity: 0.3 }}>🂠</span>
-        </div>
-        <div style={{
-          position: 'absolute', top: 6, left: 8,
-          fontSize: 10, color: 'rgba(255,255,255,0.2)',
-          fontFamily: 'Nunito, sans-serif', fontWeight: 800,
-        }}>⛳</div>
+  if (isEmptySlot) {
+  return (
+    <div
+      style={{
+        ...containerStyle,
+        border: '2px dashed rgba(255,255,255,0.25)',
+        background: 'rgba(255,255,255,0.06)',
+        boxShadow: 'inset 0 0 12px rgba(255,255,255,0.05)',
+      }}
+      className={`game-card game-card-empty ${className}`}
+      onClick={onClick}
+    />
+  );
+}
+
+if (showBack) {
+  return (
+    <div
+      style={containerStyle}
+      className={`game-card game-card-back ${className}`}
+      onClick={onClick}
+    >
+      <div style={{
+        position: 'absolute', inset: 6,
+        border: '1.5px solid rgba(255,255,255,0.2)',
+        borderRadius: dims.borderRadius - 4,
+        background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 2px, transparent 2px, transparent 8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ fontSize: dims.fontSize * 0.7, opacity: 0.3 }}>🂠</span>
       </div>
-    );
-  }
+      <div style={{
+        position: 'absolute', top: 6, left: 8,
+        fontSize: 10, color: 'rgba(255,255,255,0.2)',
+        fontFamily: 'Nunito, sans-serif', fontWeight: 800,
+      }}>⛳</div>
+    </div>
+  );
+}
 
   if (!card) return null;
 

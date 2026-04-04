@@ -25,10 +25,12 @@ export type GamePhase =
   | 'power'      // current player decides to use or skip power card
   | 'swap'       // current player decides to keep drawn card (swap) or discard it
   | 'react'      // 3-second reaction window after a discard
+  | 'giveaway'
   | 'game_over'; // game has ended
 
 export interface ReactionEntry {
   playerId: string;
+  targetPlayerId: string;  // whose card was clicked
   cardIndex: number;   // flat index in that player's hand
   timestamp: number;   // ms since epoch — use Firestore serverTimestamp in sync layer
 }
@@ -52,6 +54,11 @@ export interface GameState {
   scores: Record<string, number>;
   // Power 9: tracks which two cards are being peeked before optional swap
   power9Selection: { playerId: string; cardIndex: number }[] | null;
+
+  pendingGiveaway: {
+    giverId: string;
+    receiverId: string;
+  } | null;
 }
 
 // ─── Deck Creation ────────────────────────────────────────────────────────────
@@ -126,6 +133,7 @@ export function createInitialGameState(playerIds: string[]): GameState {
     gameOver: false,
     scores: {},
     power9Selection: null,
+    pendingGiveaway: null,
   };
 }
 
@@ -202,6 +210,83 @@ function cloneCardForPenalty(card: Card, ownerId: string, timestamp: number): Ca
   };
 }
 
+function removeCardFromHand(
+  hands: PlayerHand[],
+  playerId: string,
+  cardIndex: number,
+): { hands: PlayerHand[]; removedCard: Card | null } {
+  let removedCard: Card | null = null;
+
+  const nextHands = hands.map(hand => {
+    if (hand.playerId !== playerId) return hand;
+
+    const cards = [...hand.cards];
+    removedCard = cards[cardIndex] ?? null;
+    cards[cardIndex] = null;
+
+    return { ...hand, cards };
+  });
+
+  return { hands: nextHands, removedCard };
+}
+
+function addCardToSpecificHand(
+  hands: PlayerHand[],
+  playerId: string,
+  card: Card,
+): PlayerHand[] {
+  return hands.map(hand => {
+    if (hand.playerId !== playerId) return hand;
+    return {
+      ...hand,
+      cards: addCardToHand(hand.cards, card),
+    };
+  });
+}
+
+function drawOnePenaltyCard(
+  drawPile: Card[],
+  discardPile: Card[],
+): { drawPile: Card[]; discardPile: Card[]; card: Card | null } {
+  let workingDraw = drawPile;
+  let workingDiscard = discardPile;
+
+  if (workingDraw.length === 0) {
+    const reshuffled = reshuffleDiscardIntoDraw({
+      drawPile: workingDraw,
+      discardPile: workingDiscard,
+      hands: [],
+      playerOrder: [],
+      currentPlayerIndex: 0,
+      phase: 'draw',
+      drawnCard: null,
+      pendingPower: null,
+      lastDiscardedCard: null,
+      lastDiscardedById: null,
+      reactionWindowOpen: false,
+      reactions: [],
+      finalRound: false,
+      knockedById: null,
+      gameOver: false,
+      scores: {},
+      power9Selection: null,
+      pendingGiveaway: null,
+    } as GameState);
+
+    workingDraw = reshuffled.drawPile;
+    workingDiscard = reshuffled.discardPile;
+  }
+
+  if (workingDraw.length === 0) {
+    return { drawPile: workingDraw, discardPile: workingDiscard, card: null };
+  }
+
+  const card = { ...workingDraw[workingDraw.length - 1], faceUp: false };
+  workingDraw = workingDraw.slice(0, workingDraw.length - 1);
+
+  return { drawPile: workingDraw, discardPile: workingDiscard, card };
+}
+
 export function advanceTurn(state: GameState): GameState {
   const next = (state.currentPlayerIndex + 1) % state.playerOrder.length;
 
@@ -224,6 +309,7 @@ export function advanceTurn(state: GameState): GameState {
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
+    pendingGiveaway: null,
   };
 }
 
@@ -542,106 +628,163 @@ export function discardDrawnCard(state: GameState, playerId: string): GameState 
 export function submitReaction(
   state: GameState,
   reactingPlayerId: string,
+  targetPlayerId: string,
   cardIndex: number,
   timestamp: number,
 ): GameState {
   if (!state.reactionWindowOpen) return state;
-  if (reactingPlayerId === state.playerOrder[state.currentPlayerIndex]) return state; // can't react to your own discard
-  // Don't allow duplicate reactions from the same player
+  if (reactingPlayerId === state.playerOrder[state.currentPlayerIndex]) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
 
   return {
     ...state,
-    reactions: [...state.reactions, { playerId: reactingPlayerId, cardIndex, timestamp }],
+    reactions: [
+      ...state.reactions,
+      { playerId: reactingPlayerId, targetPlayerId, cardIndex, timestamp },
+    ],
   };
 }
 
 // Called when the 3-second reaction window closes
 export function resolveReactionWindow(state: GameState): GameState {
-  // Multiple clients may race to close the same window. Once it's already closed,
-  // treat later resolver calls as a no-op so the turn cannot advance twice.
-  if (!state.reactionWindowOpen) {
-    return state;
-  }
+  if (!state.reactionWindowOpen) return state;
 
   if (!state.lastDiscardedCard) {
     return advanceTurn({ ...state, reactionWindowOpen: false, reactions: [] });
   }
 
   const discardedValue = state.lastDiscardedCard.value;
-
-  // Sort reactions by timestamp (fastest first)
   const sorted = [...state.reactions].sort((a, b) => a.timestamp - b.timestamp);
-  const winningReaction = sorted.find(reaction => {
-    const hand = state.hands.find(entry => entry.playerId === reaction.playerId);
-    return hand?.cards[reaction.cardIndex]?.value === discardedValue;
-  }) ?? null;
-  const isWinningReaction = (reaction: ReactionEntry) => (
-    winningReaction !== null &&
-    reaction.playerId === winningReaction.playerId &&
-    reaction.cardIndex === winningReaction.cardIndex &&
-    reaction.timestamp === winningReaction.timestamp
-  );
+
+  const winningReaction =
+    sorted.find(reaction => {
+      const targetHand = state.hands.find(h => h.playerId === reaction.targetPlayerId);
+      const selectedCard = targetHand?.cards[reaction.cardIndex];
+      return selectedCard !== null && selectedCard?.value === discardedValue;
+    }) ?? null;
 
   let hands = state.hands;
   let drawPile = state.drawPile;
   let discardPile = state.discardPile;
-  if (
-    sorted.some(reaction => !isWinningReaction(reaction)) &&
-    discardPile[0]?.id === state.lastDiscardedCard.id
-  ) {
-    discardPile = discardPile.slice(1);
-  }
 
-  sorted.forEach((reaction) => {
-    const hand = hands.find(h => h.playerId === reaction.playerId);
-    if (!hand) return;
+  const applyOnePenalty = (playerId: string) => {
+    const drawn = drawOnePenaltyCard(drawPile, discardPile);
+    drawPile = drawn.drawPile;
+    discardPile = drawn.discardPile;
 
-    const reactedCard = hand.cards[reaction.cardIndex];
+    if (drawn.card) {
+      hands = addCardToSpecificHand(hands, playerId, drawn.card);
+    }
+  };
 
-    if (isWinningReaction(reaction)) {
-      // Fastest correct reaction — card is successfully discarded
-      hands = hands.map(h => {
-        if (h.playerId !== reaction.playerId) return h;
-        const cards = [...h.cards];
-        cards[reaction.cardIndex] = null;
-        return { ...h, cards };
-      });
-      if (reactedCard) {
-        discardPile = [{ ...reactedCard, faceUp: true }, ...discardPile];
+  for (const reaction of sorted) {
+    const isWinner =
+      winningReaction &&
+      reaction.playerId === winningReaction.playerId &&
+      reaction.targetPlayerId === winningReaction.targetPlayerId &&
+      reaction.cardIndex === winningReaction.cardIndex &&
+      reaction.timestamp === winningReaction.timestamp;
+
+    const targetHand = hands.find(h => h.playerId === reaction.targetPlayerId);
+    const selectedCard = targetHand?.cards[reaction.cardIndex] ?? null;
+
+    if (!selectedCard) {
+      applyOnePenalty(reaction.playerId);
+      continue;
+    }
+
+    const isCorrect = selectedCard.value === discardedValue;
+    const isOwnCard = reaction.playerId === reaction.targetPlayerId;
+
+    if (isWinner && isCorrect && isOwnCard) {
+      const removed = removeCardFromHand(hands, reaction.playerId, reaction.cardIndex);
+      hands = removed.hands;
+
+      if (removed.removedCard) {
+        discardPile = [{ ...removed.removedCard, faceUp: true }, ...discardPile];
       }
-    } else {
-      // Wrong card OR slower correct reaction — take the exposed discard and one
-      // additional penalty card from the deck.
-      hands = hands.map(h => {
-        if (h.playerId !== reaction.playerId) return h;
-        return {
-          ...h,
-          cards: addCardToHand(
-            h.cards,
-            cloneCardForPenalty(state.lastDiscardedCard!, reaction.playerId, reaction.timestamp),
-          ),
-        };
-      });
+      continue;
+    }
 
-      let s = reshuffleDiscardIntoDraw({ ...state, hands, drawPile, discardPile });
-      if (s.drawPile.length > 0) {
-        const penaltyCard = { ...s.drawPile[s.drawPile.length - 1], faceUp: false };
-        drawPile = s.drawPile.slice(0, s.drawPile.length - 1);
-        discardPile = s.discardPile;
-        hands = hands.map(h => {
-          if (h.playerId !== reaction.playerId) return h;
-          return { ...h, cards: addCardToHand(h.cards, penaltyCard) };
+    if (isWinner && isCorrect && !isOwnCard) {
+      const removed = removeCardFromHand(hands, reaction.targetPlayerId, reaction.cardIndex);
+      hands = removed.hands;
+
+      if (removed.removedCard) {
+        discardPile = [{ ...removed.removedCard, faceUp: true }, ...discardPile];
+      }
+
+      return {
+        ...state,
+        hands,
+        drawPile,
+        discardPile,
+        reactionWindowOpen: false,
+        reactions: [],
+        phase: 'giveaway',
+        pendingGiveaway: {
+          giverId: reaction.playerId,
+          receiverId: reaction.targetPlayerId,
+        },
+      };
+    }
+
+    if (isOwnCard) {
+      applyOnePenalty(reaction.playerId);
+    } else {
+      const removed = removeCardFromHand(hands, reaction.targetPlayerId, reaction.cardIndex);
+      hands = removed.hands;
+
+      if (removed.removedCard) {
+        hands = addCardToSpecificHand(hands, reaction.playerId, {
+          ...removed.removedCard,
+          faceUp: false,
         });
       }
+
+      applyOnePenalty(reaction.playerId);
     }
-  });
+  }
 
   return advanceTurn({
     ...state,
     hands,
     drawPile,
     discardPile,
+    reactionWindowOpen: false,
+    reactions: [],
+    pendingGiveaway: null,
+  });
+}
+
+export function giveAwayCard(
+  state: GameState,
+  giverId: string,
+  giverCardIndex: number,
+): GameState {
+  if (state.phase !== 'giveaway' || !state.pendingGiveaway) return state;
+  if (state.pendingGiveaway.giverId !== giverId) return state;
+
+  const giverHand = state.hands.find(h => h.playerId === giverId);
+  const selectedCard = giverHand?.cards[giverCardIndex] ?? null;
+  if (!selectedCard) return state;
+
+  const removed = removeCardFromHand(state.hands, giverId, giverCardIndex);
+  let hands = removed.hands;
+
+  if (removed.removedCard) {
+    hands = addCardToSpecificHand(
+      hands,
+      state.pendingGiveaway.receiverId,
+      { ...removed.removedCard, faceUp: false },
+    );
+  }
+
+  return advanceTurn({
+    ...state,
+    hands,
+    phase: 'giveaway',
+    pendingGiveaway: null,
     reactionWindowOpen: false,
     reactions: [],
   });
@@ -652,10 +795,21 @@ export function resolveReactionWindow(state: GameState): GameState {
 export function knock(state: GameState, playerId: string): GameState {
   if (state.finalRound) return state; // can't knock twice
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
+  if (state.phase === 'game_over' || state.phase === 'react') return state;
 
-  return {
+  const knockedState: GameState = {
     ...state,
     finalRound: true,
     knockedById: playerId,
+    drawnCard: null,
+    pendingPower: null,
+    reactionWindowOpen: false,
+    reactions: [],
+    power9Selection: null,
   };
+
+  // Knocking uses up the current player's turn immediately.
+  // advanceTurn() already knows to end the game once the turn
+  // cycles back to the knocker.
+  return advanceTurn(knockedState);
 }

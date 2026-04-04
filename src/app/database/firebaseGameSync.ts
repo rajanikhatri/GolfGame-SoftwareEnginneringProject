@@ -22,6 +22,7 @@ import {
   knock,
   endPeekPhase,
   removePlayer,
+  giveAwayCard,
   type GameState,
 } from '../backend/gameEngine';
 
@@ -155,15 +156,23 @@ export async function syncDiscardDrawn(roomCode: string): Promise<void> {
 // Reaction: use Firestore server timestamp for fair timing
 export async function syncReaction(
   roomCode: string,
+  targetPlayerId: string,
   cardIndex: number,
 ): Promise<void> {
   const user = await ensureAnonymousUser();
-  // Use Date.now() as best-effort timestamp — close enough for class project
-  // For production you'd use a Cloud Function to stamp with server time
   const timestamp = Date.now();
+
   await applyAction(roomCode, state =>
-    submitReaction(state, user.uid, cardIndex, timestamp)
+    submitReaction(state, user.uid, targetPlayerId, cardIndex, timestamp)
   );
+}
+
+export async function syncGiveAwayCard(
+  roomCode: string,
+  giverCardIndex: number,
+): Promise<void> {
+  const user = await ensureAnonymousUser();
+  await applyAction(roomCode, state => giveAwayCard(state, user.uid, giverCardIndex));
 }
 
 export async function syncResolveReactionWindow(roomCode: string): Promise<void> {
