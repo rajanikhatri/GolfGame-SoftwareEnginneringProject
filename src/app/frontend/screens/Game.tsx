@@ -1202,7 +1202,7 @@ export default function Game() {
   };
 
   const showPowerBanner = Boolean(pendingPower && peekedCards.length === 0 && powerSelections.length === 0);
-  const reactionMode = matchWindowActive && !isMyTurn;
+  const reactionMode = matchWindowActive;
 
   return (
     <div
