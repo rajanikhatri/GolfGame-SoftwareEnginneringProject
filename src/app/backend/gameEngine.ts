@@ -633,7 +633,6 @@ export function submitReaction(
   timestamp: number,
 ): GameState {
   if (!state.reactionWindowOpen) return state;
-  if (reactingPlayerId === state.playerOrder[state.currentPlayerIndex]) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
 
   return {
