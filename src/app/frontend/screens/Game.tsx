@@ -437,7 +437,7 @@ function PlayerCardGrid({
   onPowerClick?: (row: number, col: number) => void;
   reactionSelectable?: boolean;
   onReactionClick?: (playerId: string, row: number, col: number) => void;
-  reactionSelected?: { row: number; col: number } | null;
+  reactionSelected?: { playerId: string; row: number; col: number } | null;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -459,7 +459,10 @@ function PlayerCardGrid({
             const isPowerTarget = Boolean(powerSelectableCards?.some(selection => selection.row === ri && selection.col === ci));
             const isPowerSelected = Boolean(powerSelectedCards?.some(selection => selection.row === ri && selection.col === ci));
             const isSwapCue = Boolean(swapCueCards?.some(selection => selection.row === ri && selection.col === ci));
-            const isReactionSelected = reactionSelected?.row === ri && reactionSelected?.col === ci;
+            const isReactionSelected =
+              reactionSelected?.playerId === player.id &&
+              reactionSelected?.row === ri &&
+              reactionSelected?.col === ci;
             const isReactionTarget = Boolean(reactionSelectable && card && !reactionSelected);
             const isSwapTargetGuide = Boolean(isYou && selectedForSwap && card && !isPowerTarget && !isReactionTarget);
             const isInteractive = Boolean((isYou && selectedForSwap) || isPowerTarget || isReactionTarget);
@@ -595,7 +598,7 @@ function PlayerPanelComp({
   onPowerClick?: (row: number, col: number) => void;
   reactionSelectable?: boolean;
   onReactionClick?: (playerId: string, row: number, col: number) => void;
-  reactionSelected?: { row: number; col: number } | null;
+  reactionSelected?: { playerId: string; row: number; col: number } | null;
   discardLandingCue?: boolean;
 }) {
   const isHorizontal = position === 'top' || position === 'bottom';
@@ -906,7 +909,11 @@ export default function Game() {
   }>>([]);
   const [powerSelections, setPowerSelections] = useState<PowerSelection[]>([]);
   const [swapCueCards, setSwapCueCards] = useState<SwapCueSelection[]>([]);
-  const [submittedReactionCard, setSubmittedReactionCard] = useState<{ row: number; col: number } | null>(null);
+  const [submittedReactionCard, setSubmittedReactionCard] = useState<{
+    playerId: string;
+    row: number;
+    col: number;
+  } | null>(null);
   const [discardLandingPlayerIds, setDiscardLandingPlayerIds] = useState<string[]>([]);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1047,7 +1054,7 @@ export default function Game() {
 
   const handleReactionCardClick = useCallback((targetPlayerId: string, row: number, col: number) => {
     if (matchWindowActive) {
-      setSubmittedReactionCard({ row, col });
+      setSubmittedReactionCard({ playerId: targetPlayerId, row, col });
       reactToDiscard(targetPlayerId, row, col);
     }
   }, [matchWindowActive, reactToDiscard]);
@@ -1409,17 +1416,20 @@ export default function Game() {
           {p3 && (
             <PlayerPanelComp
               player={p3}
-              isActive={currentPlayerIndex === 2}
+              isActive={currentPlayerIndex === 1}
               isYou={false}
               position="top"
-              aiThinking={aiThinking && currentPlayerIndex === 2}
-              score="?"
-              revealCards={buildRevealCards(2)}
-              powerSelectableCards={buildSelectablePowerCards(2)}
-              powerSelectedCards={buildSelectedPowerCards(2)}
-              swapCueCards={buildSwapCueCards(p3.id)}
-              onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
-              discardLandingCue={discardLandingPlayerIds.includes(p3.id)}
+              selectedForSwap={swapMode}
+              aiThinking={aiThinking}
+              score={countCardsInHand(p2)}
+              revealCards={buildRevealCards(1)}
+              powerSelectableCards={buildSelectablePowerCards(1)}
+              powerSelectedCards={buildSelectedPowerCards(1)}
+              swapCueCards={buildSwapCueCards(p2.id)}
+              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              reactionSelectable={reactionMode}
+              onReactionClick={handleReactionCardClick}
+              reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
             />
           )}
         </div>
@@ -1431,15 +1441,18 @@ export default function Game() {
               player={p2}
               isActive={currentPlayerIndex === 1}
               isYou={false}
-              position="left"
-              aiThinking={aiThinking && currentPlayerIndex === 1}
-              score="?"
+              position="top"
+              selectedForSwap={swapMode}
+              aiThinking={aiThinking}
+              score={countCardsInHand(p2)}
               revealCards={buildRevealCards(1)}
               powerSelectableCards={buildSelectablePowerCards(1)}
               powerSelectedCards={buildSelectedPowerCards(1)}
               swapCueCards={buildSwapCueCards(p2.id)}
               onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
-              discardLandingCue={discardLandingPlayerIds.includes(p2.id)}
+              reactionSelectable={reactionMode}
+              onReactionClick={handleReactionCardClick}
+              reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
             />
           )}
         </div>
@@ -1465,17 +1478,20 @@ export default function Game() {
           {p4 && (
             <PlayerPanelComp
               player={p4}
-              isActive={currentPlayerIndex === 3}
+              isActive={currentPlayerIndex === 1}
               isYou={false}
-              position="right"
-              aiThinking={aiThinking && currentPlayerIndex === 3}
-              score="?"
-              revealCards={buildRevealCards(3)}
-              powerSelectableCards={buildSelectablePowerCards(3)}
-              powerSelectedCards={buildSelectedPowerCards(3)}
-              swapCueCards={buildSwapCueCards(p4.id)}
-              onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
-              discardLandingCue={discardLandingPlayerIds.includes(p4.id)}
+              position="top"
+              selectedForSwap={swapMode}
+              aiThinking={aiThinking}
+              score={countCardsInHand(p2)}
+              revealCards={buildRevealCards(1)}
+              powerSelectableCards={buildSelectablePowerCards(1)}
+              powerSelectedCards={buildSelectedPowerCards(1)}
+              swapCueCards={buildSwapCueCards(p2.id)}
+              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              reactionSelectable={reactionMode}
+              onReactionClick={handleReactionCardClick}
+              reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
             />
           )}
         </div>
@@ -1710,7 +1726,11 @@ export default function Game() {
               {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
-              {reactionMode && (submittedReactionCard ? '✅ Reaction submitted' : '⚡ Reaction window: tap your matching card now')}
+              {reactionMode && (
+                submittedReactionCard
+                  ? '✅ Reaction submitted'
+                  : '⚡ Reaction window: tap any matching card now'
+              )}
               {!reactionMode && !isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>
