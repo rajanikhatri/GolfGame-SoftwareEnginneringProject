@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
+import { HandCue } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
 
 // ─── Match Banner ────────────────────────────────────────────────────────────
@@ -383,199 +384,6 @@ function DiscardLandingCue() {
   );
 }
 
-function CartoonGlovePointer({ mode }: { mode: 'draw' | 'swap' | 'power' }) {
-  const transform = mode === 'swap'
-    ? 'rotate(90 28 28)'
-    : mode === 'draw'
-    ? 'rotate(-8 28 28)'
-    : 'rotate(-2 28 28)';
-  const cuffMotion = mode === 'draw'
-    ? { y: [0, -0.9, 0], scaleX: [1, 1.03, 1] }
-    : mode === 'swap'
-    ? { y: [0, 0.5, 0], scaleX: [1, 1.02, 1] }
-    : { y: [0, -0.6, 0], scaleX: [1, 1.015, 1] };
-  const cuffDuration = mode === 'draw' ? 1.15 : mode === 'swap' ? 1.05 : 0.95;
-
-  return (
-    <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
-      <g transform={transform}>
-        <ellipse cx="28" cy="50" rx="12" ry="3.2" fill="rgba(0,0,0,0.16)" />
-        <motion.g
-          animate={cuffMotion}
-          transition={{
-            duration: cuffDuration,
-            repeat: Infinity,
-            repeatType: 'mirror',
-            ease: 'easeInOut',
-          }}
-        >
-          <rect x="17" y="4.8" width="22" height="8.6" rx="4.4" fill="#191A24" />
-          <rect x="15.8" y="11" width="24.4" height="9.4" rx="4.8" fill="#FAFCFF" stroke="#161616" strokeWidth="2.1" />
-          <circle cx="22.2" cy="15.7" r="1.1" fill="#161616" />
-          <circle cx="28" cy="15.7" r="1.1" fill="#161616" />
-          <circle cx="33.8" cy="15.7" r="1.1" fill="#161616" />
-        </motion.g>
-        <ellipse cx="28.5" cy="28.8" rx="12.1" ry="11.2" fill="#FFFFFF" stroke="#161616" strokeWidth="2.5" />
-        <ellipse cx="17.8" cy="31.5" rx="7.2" ry="8.9" fill="#FFFFFF" stroke="#161616" strokeWidth="2.3" transform="rotate(-27 17.8 31.5)" />
-        <rect x="18.7" y="18.1" width="6.1" height="15.6" rx="3.05" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
-        <rect x="24.3" y="16.6" width="6.4" height="16.7" rx="3.2" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
-        <rect x="30.2" y="18.2" width="6.1" height="15.4" rx="3.05" fill="#FFFFFF" stroke="#161616" strokeWidth="2.05" />
-        <rect x="24.2" y="25.2" width="9.8" height="19" rx="4.9" fill="#FFFFFF" stroke="#161616" strokeWidth="2.25" />
-        <ellipse cx="29.6" cy="46.2" rx="5.1" ry="4.7" fill="#FFFFFF" stroke="#161616" strokeWidth="2.2" />
-        <path d="M21.8 24c1.9 1.2 4 1.6 6 1" stroke="#161616" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity="0.72" />
-        <path d="M30.2 23.7c1.7 1 3.6 1.2 5.3 0.5" stroke="#161616" strokeWidth="1.8" strokeLinecap="round" fill="none" opacity="0.64" />
-        <path d="M19.6 28.6c1.2 0.9 2.4 1.6 3.8 1.9" stroke="#161616" strokeWidth="1.45" strokeLinecap="round" fill="none" opacity="0.35" />
-        <path d="M22.5 18.4c2.5 -1.3 5.2 -1.5 8.1 -0.5" stroke="#FFFFFF" strokeWidth="1.35" strokeLinecap="round" fill="none" opacity="0.82" />
-      </g>
-    </svg>
-  );
-}
-
-function CardHandCue({ mode }: { mode: 'draw' | 'swap' | 'power' }) {
-  const config = mode === 'draw'
-    ? {
-        top: -24,
-        left: '58%',
-        border: 'rgba(66,165,245,0.35)',
-        glow: 'rgba(66,165,245,0.28)',
-        trail: 'rgba(129,212,250,0.6)',
-        animate: {
-          opacity: 1,
-          x: [-4, 3, -2],
-          y: [-16, -6, -13],
-          rotate: [-8, -1, -6],
-          scale: [1, 0.985, 1],
-        },
-        duration: 1.45,
-      }
-    : mode === 'swap'
-    ? {
-        top: -18,
-        left: '38%',
-        border: 'rgba(255,193,7,0.36)',
-        glow: 'rgba(255,193,7,0.28)',
-        trail: 'rgba(255,224,130,0.62)',
-        animate: {
-          opacity: 1,
-          x: [-8, 10, -3],
-          y: [-5, 1, -3],
-          rotate: [-10, 3, -7],
-          scale: [1, 1.015, 1],
-        },
-        duration: 1.35,
-      }
-    : {
-        top: -20,
-        left: '50%',
-        border: 'rgba(255,213,79,0.38)',
-        glow: 'rgba(255,213,79,0.26)',
-        trail: 'rgba(255,241,118,0.62)',
-        animate: {
-          opacity: 1,
-          x: [0, 0, 0],
-          y: [-10, -1, -8],
-          rotate: [-6, 0, -5],
-          scale: [1, 0.96, 1],
-        },
-        duration: 1.2,
-      };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8, scale: 0.88 }}
-      animate={config.animate}
-      exit={{ opacity: 0, y: -12, scale: 0.84 }}
-      transition={{
-        duration: config.duration,
-        repeat: Infinity,
-        repeatType: 'loop',
-        ease: 'easeInOut',
-      }}
-      style={{
-        position: 'absolute',
-        top: config.top,
-        left: config.left,
-        transform: 'translateX(-50%)',
-        zIndex: 8,
-        pointerEvents: 'none',
-        filter: 'drop-shadow(0 7px 14px rgba(0,0,0,0.28))',
-      }}
-    >
-      <motion.div
-        animate={{
-          opacity: [0.18, 0.34, 0.18],
-          scale: [0.92, 1.1, 0.92],
-        }}
-        transition={{
-          duration: config.duration,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
-        style={{
-          position: 'absolute',
-          inset: -8,
-          borderRadius: 999,
-          background: `radial-gradient(circle, ${config.glow} 0%, transparent 72%)`,
-          filter: 'blur(7px)',
-        }}
-      />
-      {[0, 1].map(index => (
-        <motion.div
-          key={index}
-          animate={mode === 'swap'
-            ? {
-                opacity: [0, 0.42, 0],
-                x: [-8 - index * 7, 6 - index * 7, 14 - index * 7],
-                y: [7 - index * 2, 3 - index * 2, 0 - index * 2],
-                scale: [0.65, 1, 1.15],
-              }
-            : mode === 'draw'
-            ? {
-                opacity: [0, 0.4, 0],
-                x: [6 + index * 3, 2 + index * 2, -1 + index],
-                y: [16 + index * 3, 8 + index * 2, 2 + index],
-                scale: [0.6, 0.95, 1.12],
-              }
-            : {
-                opacity: [0, 0.36, 0],
-                x: [0, 0, 0],
-                y: [10 + index * 4, 4 + index * 3, -1 + index],
-                scale: [0.62, 0.94, 1.06],
-              }}
-          transition={{
-            duration: config.duration,
-            repeat: Infinity,
-            ease: 'easeOut',
-            delay: index * 0.18,
-          }}
-          style={{
-            position: 'absolute',
-            width: 10 - index * 2,
-            height: 10 - index * 2,
-            borderRadius: '50%',
-            background: config.trail,
-            filter: 'blur(1px)',
-            left: mode === 'swap' ? 10 : '50%',
-            top: mode === 'draw' ? 18 : 14,
-            marginLeft: mode === 'swap' ? 0 : -5 + index,
-          }}
-        />
-      ))}
-      <div style={{
-        position: 'relative',
-        width: 52,
-        height: 52,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        boxShadow: `0 8px 20px ${config.border}`,
-      }}>
-        <CartoonGlovePointer mode={mode} />
-      </div>
-    </motion.div>
-  );
-}
-
 function PowerPanelCue({
   text,
   power,
@@ -692,7 +500,7 @@ interface PowerSelection extends PowerCardSelection {
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
-  revealCards, powerSelectableCards, powerSelectedCards, swapCueCards, powerConfirmCards, powerModeActive, powerTone, onPowerClick, peekPhase, reactionSelectable, onReactionClick, reactionSelected,
+  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, onPowerClick, peekPhase, reactionSelectable, onReactionClick, reactionSelected,
 }: {
   player: Player;
   isActive: boolean;
@@ -702,8 +510,8 @@ function PlayerCardGrid({
   revealCards?: GridSelection[];
   powerSelectableCards?: GridSelection[];
   powerSelectedCards?: OrderedGridSelection[];
-  swapCueCards?: GridSelection[];
   powerConfirmCards?: GridSelection[];
+  powerSwapGlowCardIds?: string[];
   powerModeActive?: boolean;
   powerTone?: PowerTone | null;
   peekPhase?: boolean;
@@ -733,8 +541,8 @@ function PlayerCardGrid({
             const powerSelection = powerSelectedCards?.find(selection => selection.row === ri && selection.col === ci);
             const powerSelectionOrder = powerSelection?.order ?? null;
             const isPowerSelected = powerSelectionOrder !== null;
-            const isSwapCue = Boolean(swapCueCards?.some(selection => selection.row === ri && selection.col === ci));
             const isPowerConfirm = Boolean(powerConfirmCards?.some(selection => selection.row === ri && selection.col === ci));
+            const isPowerSwapGlow = Boolean(displayCard?.id && powerSwapGlowCardIds?.includes(displayCard.id));
             const isReactionSelected =
               reactionSelected?.playerId === player.id &&
               reactionSelected?.row === ri &&
@@ -786,6 +594,20 @@ function PlayerCardGrid({
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,
                 }}
               >
+                {isPowerSwapGlow && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: -5,
+                      borderRadius: isYou ? 16 : 14,
+                      pointerEvents: 'none',
+                      zIndex: 1,
+                      background: 'radial-gradient(circle, rgba(239,83,80,0.22) 0%, rgba(239,83,80,0.12) 42%, transparent 72%)',
+                      boxShadow: 'inset 0 0 0 2px rgba(255,138,128,0.78), 0 0 18px rgba(239,83,80,0.42), 0 0 34px rgba(183,28,28,0.24)',
+                      animation: 'power-swap-red-glow 5s ease-out forwards',
+                    }}
+                  />
+                )}
                 <GameCard
                   card={displayCard ?? undefined}
                   faceDown={faceDown}
@@ -912,7 +734,6 @@ function PlayerCardGrid({
                     SWAPPED
                   </motion.div>
                 )}
-                {powerModeActive && isSwapCue && !isPowerConfirm && <CardHandCue mode="power" />}
                 {/* Column match indicator — only for your own cards */}
                 {ri === 0 && isYou && player.cards[1]?.[ci] &&
                   card?.faceUp && player.cards[1][ci]?.faceUp &&
@@ -947,7 +768,7 @@ function PlayerCardGrid({
 // ─── Player Panel ─────────────────────────────────────────────────────────────
 function PlayerPanelComp({
   player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking, score,
-  revealCards, powerSelectableCards, powerSelectedCards, swapCueCards, powerConfirmCards, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue,
+  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue,
 }: {
   player: Player;
   isActive: boolean;
@@ -960,8 +781,8 @@ function PlayerPanelComp({
   revealCards?: GridSelection[];
   powerSelectableCards?: GridSelection[];
   powerSelectedCards?: OrderedGridSelection[];
-  swapCueCards?: GridSelection[];
   powerConfirmCards?: GridSelection[];
+  powerSwapGlowCardIds?: string[];
   powerModeActive?: boolean;
   powerTone?: PowerTone | null;
   powerGuideText?: string | null;
@@ -1066,7 +887,16 @@ function PlayerPanelComp({
           {powerGuideText && powerTone && <PowerPanelCue text={powerGuideText} power={powerTone} />}
         </AnimatePresence>
         <AnimatePresence>
-          {showPowerHandCue && <CardHandCue mode="power" />}
+          {showPowerHandCue && (
+            <HandCue
+              size={isYou ? 78 : 68}
+              style={{
+                top: isYou ? -42 : -36,
+                left: '50%',
+                transform: 'translateX(-50%)',
+              }}
+            />
+          )}
         </AnimatePresence>
         <PlayerCardGrid
           player={player}
@@ -1077,8 +907,8 @@ function PlayerPanelComp({
           revealCards={revealCards}
           powerSelectableCards={powerSelectableCards}
           powerSelectedCards={powerSelectedCards}
-          swapCueCards={swapCueCards}
           powerConfirmCards={powerConfirmCards}
+          powerSwapGlowCardIds={powerSwapGlowCardIds}
           powerModeActive={powerModeActive}
           powerTone={powerTone}
           onPowerClick={onPowerClick}
@@ -1310,8 +1140,8 @@ export default function Game() {
     playerIndex: number; row: number; col: number;
   }>>([]);
   const [powerSelections, setPowerSelections] = useState<PowerSelection[]>([]);
-  const [swapCueCards, setSwapCueCards] = useState<SwapCueSelection[]>([]);
   const [powerConfirmCards, setPowerConfirmCards] = useState<SwapCueSelection[]>([]);
+  const [powerSwapGlowCardIds, setPowerSwapGlowCardIds] = useState<string[]>([]);
   const [powerCompletionLabel, setPowerCompletionLabel] = useState<string | null>(null);
   const [submittedReactionCard, setSubmittedReactionCard] = useState<{
     playerId: string;
@@ -1321,8 +1151,8 @@ export default function Game() {
   const [discardLandingPlayerIds, setDiscardLandingPlayerIds] = useState<string[]>([]);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const swapCueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const powerSwapGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevPlayersRef = useRef<Player[]>([]);
   const prevMatchWindowRef = useRef(matchWindowActive);
@@ -1428,28 +1258,30 @@ export default function Game() {
         return selections;
       });
 
-      if (swapCueTimerRef.current) clearTimeout(swapCueTimerRef.current);
-      if (changedSlots.length > 0) {
-        setSwapCueCards(changedSlots);
-        swapCueTimerRef.current = setTimeout(() => {
-          setSwapCueCards([]);
-        }, 1800);
-      } else {
-        setSwapCueCards([]);
-      }
+      const changedCardIds = changedSlots.flatMap(selection => {
+        const currentPlayer = players.find(player => player.id === selection.playerId);
+        const currentCard = currentPlayer?.cards[selection.row]?.[selection.col] ?? null;
+        return currentCard ? [currentCard.id] : [];
+      });
+      const uniqueChangedCardIds = [...new Set(changedCardIds)];
 
       const shouldConfirmPowerSwap =
         previousPhase === 'power' &&
         (previousPendingPower === '9' || previousPendingPower === '10') &&
         changedSlots.length >= 2;
 
-      if (powerConfirmTimerRef.current) clearTimeout(powerConfirmTimerRef.current);
-      if (powerCompletionTimerRef.current) clearTimeout(powerCompletionTimerRef.current);
       if (shouldConfirmPowerSwap) {
+        if (powerConfirmTimerRef.current) clearTimeout(powerConfirmTimerRef.current);
+        if (powerSwapGlowTimerRef.current) clearTimeout(powerSwapGlowTimerRef.current);
+        if (powerCompletionTimerRef.current) clearTimeout(powerCompletionTimerRef.current);
         setPowerConfirmCards(changedSlots);
         powerConfirmTimerRef.current = setTimeout(() => {
           setPowerConfirmCards([]);
         }, 1200);
+        setPowerSwapGlowCardIds(uniqueChangedCardIds);
+        powerSwapGlowTimerRef.current = setTimeout(() => {
+          setPowerSwapGlowCardIds([]);
+        }, 5000);
         setPowerCompletionLabel(previousPendingPower === '9' ? 'Peek swap complete' : 'Blind swap complete');
         powerCompletionTimerRef.current = setTimeout(() => {
           setPowerCompletionLabel(null);
@@ -1467,8 +1299,8 @@ export default function Game() {
 
   useEffect(() => () => {
     if (discardLandingTimerRef.current) clearTimeout(discardLandingTimerRef.current);
-    if (swapCueTimerRef.current) clearTimeout(swapCueTimerRef.current);
     if (powerConfirmTimerRef.current) clearTimeout(powerConfirmTimerRef.current);
+    if (powerSwapGlowTimerRef.current) clearTimeout(powerSwapGlowTimerRef.current);
     if (powerCompletionTimerRef.current) clearTimeout(powerCompletionTimerRef.current);
   }, []);
 
@@ -1507,12 +1339,6 @@ export default function Game() {
         : []
     ));
   }, [powerSelections]);
-
-  const buildSwapCueCards = useCallback((playerId: string): GridSelection[] => {
-    return swapCueCards
-      .filter(selection => selection.playerId === playerId)
-      .map(selection => ({ row: selection.row, col: selection.col }));
-  }, [swapCueCards]);
 
   const buildPowerConfirmCards = useCallback((playerId: string): GridSelection[] => {
     return powerConfirmCards
@@ -1778,9 +1604,9 @@ export default function Game() {
               gap: 10,
               padding: '10px 16px',
               borderRadius: 999,
-              background: 'rgba(12, 28, 50, 0.92)',
-              border: '1px solid rgba(129,199,132,0.34)',
-              boxShadow: '0 16px 32px rgba(0,0,0,0.28), 0 0 22px rgba(129,199,132,0.18)',
+              background: 'rgba(46, 16, 18, 0.94)',
+              border: '1px solid rgba(239,83,80,0.34)',
+              boxShadow: '0 16px 32px rgba(0,0,0,0.28), 0 0 22px rgba(239,83,80,0.2)',
               color: 'white',
               fontSize: 12,
               fontWeight: 900,
@@ -1793,8 +1619,8 @@ export default function Game() {
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: '#81C784',
-              boxShadow: '0 0 10px rgba(129,199,132,0.72)',
+              background: '#EF5350',
+              boxShadow: '0 0 10px rgba(239,83,80,0.72)',
             }} />
             <span>{powerCompletionLabel}</span>
           </motion.div>
@@ -1970,8 +1796,8 @@ export default function Game() {
               revealCards={buildRevealCards(2)}
               powerSelectableCards={buildSelectablePowerCards(2)}
               powerSelectedCards={buildSelectedPowerCards(2)}
-              swapCueCards={buildSwapCueCards(p3.id)}
               powerConfirmCards={buildPowerConfirmCards(p3.id)}
+              powerSwapGlowCardIds={powerSwapGlowCardIds}
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(2)}
@@ -1997,8 +1823,8 @@ export default function Game() {
               revealCards={buildRevealCards(1)}
               powerSelectableCards={buildSelectablePowerCards(1)}
               powerSelectedCards={buildSelectedPowerCards(1)}
-              swapCueCards={buildSwapCueCards(p2.id)}
               powerConfirmCards={buildPowerConfirmCards(p2.id)}
+              powerSwapGlowCardIds={powerSwapGlowCardIds}
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(1)}
@@ -2040,8 +1866,8 @@ export default function Game() {
               revealCards={buildRevealCards(3)}
               powerSelectableCards={buildSelectablePowerCards(3)}
               powerSelectedCards={buildSelectedPowerCards(3)}
-              swapCueCards={buildSwapCueCards(p4.id)}
               powerConfirmCards={buildPowerConfirmCards(p4.id)}
+              powerSwapGlowCardIds={powerSwapGlowCardIds}
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(3)}
@@ -2164,8 +1990,8 @@ export default function Game() {
               revealCards={buildRevealCards(0)}
               powerSelectableCards={buildSelectablePowerCards(0)}
               powerSelectedCards={buildSelectedPowerCards(0)}
-              swapCueCards={buildSwapCueCards(p1.id)}
               powerConfirmCards={buildPowerConfirmCards(p1.id)}
+              powerSwapGlowCardIds={powerSwapGlowCardIds}
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(0)}
