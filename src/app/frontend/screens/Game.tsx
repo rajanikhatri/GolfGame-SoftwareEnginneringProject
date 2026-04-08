@@ -888,13 +888,19 @@ export default function Game() {
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, reactToDiscard, knock,
     initGame, pendingPower, resolvePower, skipPower, disconnectedPlayerName, swapCountdown, endPeek,
-    selectPower9Card, confirmPower9, usePower10,
+    selectPower9Card, confirmPower9, usePower10, giveawayGiverId,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
   const [swapMode, setSwapMode] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
   const [peekActive, setPeekActive] = useState(true);
+  const p1 = players[0];
+  const p2 = players[1];
+  const p3 = players[2];
+  const p4 = players[3];
+  const canGiveAway = phase === 'giveaway' && giveawayGiverId === p1?.id;
+  const giveawayGiverName = players.find(player => player.id === giveawayGiverId)?.name ?? 'Someone';
 
   useEffect(() => {
     if (!peekActive) return;
@@ -1046,11 +1052,11 @@ export default function Game() {
       swapCard(row, col);
       setSwapMode(false);
     }
-    if (phase === 'giveaway' && isMyTurn) {
+    if (phase === 'giveaway' && canGiveAway) {
       giveAwayCardAction(row, col);
       return;
     }
-  }, [phase, isMyTurn, swapCard]);
+  }, [phase, isMyTurn, canGiveAway, swapCard, giveAwayCardAction]);
 
   const handleReactionCardClick = useCallback((targetPlayerId: string, row: number, col: number) => {
     if (matchWindowActive) {
@@ -1186,11 +1192,6 @@ export default function Game() {
 
   if (players.length === 0) return null;
 
-  const p1 = players[0];
-  const p2 = players[1];
-  const p3 = players[2];
-  const p4 = players[3];
-
   const calcVisibleScore = (p: Player) => {
     let total = 0;
     for (let col = 0; col < 2; col++) {
@@ -1210,6 +1211,29 @@ export default function Game() {
 
   const showPowerBanner = Boolean(pendingPower && peekedCards.length === 0 && powerSelections.length === 0);
   const reactionMode = matchWindowActive;
+  const statusLabel = pendingPower === '7'
+    ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
+    : pendingPower === '8'
+    ? (isMyTurn ? '🕵️ SPY AN OPPONENT' : `🕵️ ${players[currentPlayerIndex]?.name} IS USING 8`)
+    : pendingPower === '9'
+    ? (isMyTurn
+      ? (powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'}` : '👀 SWAP OR KEEP')
+      : `👀 ${players[currentPlayerIndex]?.name} IS USING 9`)
+    : pendingPower === '10'
+    ? (isMyTurn
+      ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : powerSelections.length === 1 ? '🔀 PICK 1 MORE CARD' : '🔀 SWAP SENT')
+      : `🔀 ${players[currentPlayerIndex]?.name} IS USING 10`)
+    : phase === 'giveaway'
+    ? (canGiveAway ? '🎁 GIVE A CARD AWAY' : `🎁 ${giveawayGiverName} IS GIVING A CARD`)
+    : phase === 'match_window'
+    ? '⚡ MATCH WINDOW'
+    : phase === 'swap'
+    ? (isMyTurn ? '🔄 SWAP OR DISCARD' : `${players[currentPlayerIndex]?.name}'S TURN`)
+    : phase === 'draw'
+    ? (isMyTurn ? '🎮 YOUR TURN' : `${players[currentPlayerIndex]?.name}'S TURN`)
+    : isMyTurn
+    ? '🎮 YOUR TURN'
+    : `${players[currentPlayerIndex]?.name}'S TURN`;
 
   return (
     <div
@@ -1369,16 +1393,7 @@ export default function Game() {
             animation: 'pulse-glow 1.5s infinite',
           }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: 'white', fontFamily: 'Nunito' }}>
-            {pendingPower === '7' ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
-              : pendingPower === '8' ? (isMyTurn ? '🕵️ SPY AN OPPONENT' : `🕵️ ${players[currentPlayerIndex]?.name} IS USING 8`)
-              : pendingPower === '9' ? (isMyTurn
-                ? (powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'}` : '👀 SWAP OR KEEP')
-                : `👀 ${players[currentPlayerIndex]?.name} IS USING 9`)
-              : pendingPower === '10' ? (isMyTurn
-                ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : powerSelections.length === 1 ? '🔀 PICK 1 MORE CARD' : '🔀 SWAP SENT')
-                : `🔀 ${players[currentPlayerIndex]?.name} IS USING 10`)
-              : isMyTurn ? '🎮 YOUR TURN'
-              : `${players[currentPlayerIndex]?.name}'S TURN`}
+            {statusLabel}
           </span>
         </div>
 
@@ -1416,20 +1431,20 @@ export default function Game() {
           {p3 && (
             <PlayerPanelComp
               player={p3}
-              isActive={currentPlayerIndex === 1}
+              isActive={currentPlayerIndex === 2}
               isYou={false}
               position="top"
               selectedForSwap={swapMode}
               aiThinking={aiThinking}
-              score={countCardsInHand(p2)}
-              revealCards={buildRevealCards(1)}
-              powerSelectableCards={buildSelectablePowerCards(1)}
-              powerSelectedCards={buildSelectedPowerCards(1)}
-              swapCueCards={buildSwapCueCards(p2.id)}
-              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              score={countCardsInHand(p3)}
+              revealCards={buildRevealCards(2)}
+              powerSelectableCards={buildSelectablePowerCards(2)}
+              powerSelectedCards={buildSelectedPowerCards(2)}
+              swapCueCards={buildSwapCueCards(p3.id)}
+              onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
               reactionSelectable={reactionMode}
               onReactionClick={handleReactionCardClick}
-              reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
+              reactionSelected={submittedReactionCard?.playerId === p3.id ? submittedReactionCard : null}
             />
           )}
         </div>
@@ -1441,7 +1456,7 @@ export default function Game() {
               player={p2}
               isActive={currentPlayerIndex === 1}
               isYou={false}
-              position="top"
+              position="left"
               selectedForSwap={swapMode}
               aiThinking={aiThinking}
               score={countCardsInHand(p2)}
@@ -1478,20 +1493,20 @@ export default function Game() {
           {p4 && (
             <PlayerPanelComp
               player={p4}
-              isActive={currentPlayerIndex === 1}
+              isActive={currentPlayerIndex === 3}
               isYou={false}
-              position="top"
+              position="right"
               selectedForSwap={swapMode}
               aiThinking={aiThinking}
-              score={countCardsInHand(p2)}
-              revealCards={buildRevealCards(1)}
-              powerSelectableCards={buildSelectablePowerCards(1)}
-              powerSelectedCards={buildSelectedPowerCards(1)}
-              swapCueCards={buildSwapCueCards(p2.id)}
-              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              score={countCardsInHand(p4)}
+              revealCards={buildRevealCards(3)}
+              powerSelectableCards={buildSelectablePowerCards(3)}
+              powerSelectedCards={buildSelectedPowerCards(3)}
+              swapCueCards={buildSwapCueCards(p4.id)}
+              onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
               reactionSelectable={reactionMode}
               onReactionClick={handleReactionCardClick}
-              reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
+              reactionSelected={submittedReactionCard?.playerId === p4.id ? submittedReactionCard : null}
             />
           )}
         </div>
@@ -1726,6 +1741,8 @@ export default function Game() {
               {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
+              {phase === 'giveaway' && canGiveAway && '🎁 Choose one of your cards to give away'}
+              {phase === 'giveaway' && !canGiveAway && `🎁 ${giveawayGiverName} is giving a card away...`}
               {reactionMode && (
                 submittedReactionCard
                   ? '✅ Reaction submitted'
