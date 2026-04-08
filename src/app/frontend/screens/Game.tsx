@@ -818,6 +818,7 @@ function PlayerPanelComp({
   const hasPowerConfirmCards = Boolean(powerConfirmCards && powerConfirmCards.length > 0);
   const shouldDimForPower = Boolean(powerModeActive && !hasPowerTargets && !hasPowerSelections && !hasPowerConfirmCards);
   const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
+  const showInstructionalPanelCue = Boolean(isYou && powerModeActive && powerGuideText && powerTone);
 
   return (
     <div style={{
@@ -903,7 +904,9 @@ function PlayerPanelComp({
           {discardLandingCue && <DiscardLandingCue />}
         </AnimatePresence>
         <AnimatePresence>
-          {powerGuideText && powerTone && <PowerPanelCue text={powerGuideText} power={powerTone} />}
+          {showInstructionalPanelCue && powerGuideText && powerTone && (
+            <PowerPanelCue text={powerGuideText} power={powerTone} />
+          )}
         </AnimatePresence>
         <PlayerCardGrid
           player={player}
@@ -1118,6 +1121,7 @@ export default function Game() {
   const gameRootRef = useRef<HTMLDivElement | null>(null);
   const cardNodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const {
+    myPlayerId,
     players, drawPile, discardPile, currentPlayerIndex,
     isMyTurn, giveAwayCardAction,
     drawnCard, phase, finalRound, knockedBy,
@@ -1171,6 +1175,7 @@ export default function Game() {
   const prevMatchWindowRef = useRef(matchWindowActive);
   const prevPhaseRef = useRef(phase);
   const prevPendingPowerRef = useRef<typeof pendingPower>(pendingPower);
+  const prevGuidancePowerRef = useRef<typeof pendingPower>(pendingPower);
 
   const buildCardNodeKey = useCallback((playerId: string, row: number, col: number) => {
     return `${playerId}:${row}:${col}`;
@@ -1243,6 +1248,22 @@ export default function Game() {
       setPowerSelections([]);
     }
   }, [phase]);
+
+  useEffect(() => {
+    if (prevGuidancePowerRef.current !== pendingPower) {
+      setPeekedCards([]);
+      setPowerSelections([]);
+      setSelectedPowerCueAnchor(null);
+    }
+    prevGuidancePowerRef.current = pendingPower;
+  }, [pendingPower]);
+
+  useEffect(() => {
+    if (phase === 'power' && pendingPower && isMyTurn && currentPlayerIndex === 0) return;
+    setPeekedCards([]);
+    setPowerSelections([]);
+    setSelectedPowerCueAnchor(null);
+  }, [phase, pendingPower, isMyTurn, currentPlayerIndex]);
 
   useEffect(() => {
     if (!matchWindowActive) {
@@ -1562,7 +1583,13 @@ export default function Game() {
 
   if (players.length === 0) return null;
 
-  const powerModeActive = phase === 'power' && isMyTurn && Boolean(pendingPower);
+  const localPowerViewerReady = Boolean(myPlayerId) && players[0]?.id === myPlayerId;
+  const powerModeActive =
+    phase === 'power' &&
+    Boolean(pendingPower) &&
+    isMyTurn &&
+    currentPlayerIndex === 0 &&
+    localPowerViewerReady;
   const powerInteractionActive =
     powerModeActive &&
     !((pendingPower === '7' || pendingPower === '8') && peekedCards.length > 0) &&
