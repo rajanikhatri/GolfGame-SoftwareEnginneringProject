@@ -740,7 +740,6 @@ function PlayerCardGrid({
               reactionSelected?.row === ri &&
               reactionSelected?.col === ci;
             const isReactionTarget = Boolean(reactionSelectable && card && !reactionSelected);
-            const isSwapTargetGuide = Boolean(isYou && selectedForSwap && card && !isPowerTarget && !isReactionTarget);
             const shouldDimForPower = Boolean(
               powerModeActive &&
               card &&
@@ -795,7 +794,6 @@ function PlayerCardGrid({
                   selected={isReactionSelected || isPowerSelected}
                   onClick={handleClick}
                   glowing={
-                    (isActive && isYou && selectedForSwap) ||
                     isPeeked ||
                     isPowerTarget ||
                     isPowerSelected ||
@@ -914,8 +912,7 @@ function PlayerCardGrid({
                     SWAPPED
                   </motion.div>
                 )}
-                {isSwapTargetGuide && <CardHandCue mode="swap" />}
-                {isSwapCue && !isPowerConfirm && <CardHandCue mode="swap" />}
+                {powerModeActive && isSwapCue && !isPowerConfirm && <CardHandCue mode="power" />}
                 {/* Column match indicator — only for your own cards */}
                 {ri === 0 && isYou && player.cards[1]?.[ci] &&
                   card?.faceUp && player.cards[1][ci]?.faceUp &&
@@ -980,6 +977,7 @@ function PlayerPanelComp({
   const hasPowerConfirmCards = Boolean(powerConfirmCards && powerConfirmCards.length > 0);
   const shouldDimForPower = Boolean(powerModeActive && !hasPowerTargets && !hasPowerSelections && !hasPowerConfirmCards);
   const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
+  const showPowerHandCue = Boolean(powerModeActive && powerTone && hasPowerTargets);
 
   return (
     <div style={{
@@ -1067,6 +1065,9 @@ function PlayerPanelComp({
         <AnimatePresence>
           {powerGuideText && powerTone && <PowerPanelCue text={powerGuideText} power={powerTone} />}
         </AnimatePresence>
+        <AnimatePresence>
+          {showPowerHandCue && <CardHandCue mode="power" />}
+        </AnimatePresence>
         <PlayerCardGrid
           player={player}
           isActive={isActive}
@@ -1124,7 +1125,6 @@ function PileArea({
             onClick={canDraw ? onDraw : undefined}
             style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
           >
-            {canDraw && !drawnCard && <CardHandCue mode="draw" />}
             {/* Stack shadow layers */}
             {[3, 2, 1].map(offset => (
               <div
@@ -1258,7 +1258,6 @@ function PileArea({
               )}
             </div>
             <div style={{ position: 'relative' }}>
-              {isMyTurn && phase === 'swap' && <CardHandCue mode="swap" />}
               <GameCard card={drawnCard} size="md" glowing />
             </div>
           </motion.div>
@@ -1627,6 +1626,10 @@ export default function Game() {
   if (players.length === 0) return null;
 
   const powerModeActive = phase === 'power' && isMyTurn && Boolean(pendingPower);
+  const powerInteractionActive =
+    powerModeActive &&
+    !((pendingPower === '7' || pendingPower === '8') && peekedCards.length > 0) &&
+    !(pendingPower === '10' && powerSelections.length === 2);
   const powerTone = phase === 'power' && pendingPower ? pendingPower : null;
   const powerBannerCopy = pendingPower
     ? getPowerBannerCopy(
@@ -1639,7 +1642,7 @@ export default function Game() {
     : null;
 
   const buildPowerGuideText = (playerIndex: number): string | null => {
-    if (!powerModeActive || !pendingPower) return null;
+    if (!powerInteractionActive || !pendingPower) return null;
 
     const selectableCount = buildSelectablePowerCards(playerIndex).length;
     const selectedCount = buildSelectedPowerCards(playerIndex).length;
@@ -1687,7 +1690,7 @@ export default function Game() {
     return total;
   };
 
-  const showPowerBanner = Boolean(powerBannerCopy);
+  const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
   const reactionMode = matchWindowActive;
   const statusLabel = pendingPower === '7'
     ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
@@ -1969,7 +1972,7 @@ export default function Game() {
               powerSelectedCards={buildSelectedPowerCards(2)}
               swapCueCards={buildSwapCueCards(p3.id)}
               powerConfirmCards={buildPowerConfirmCards(p3.id)}
-              powerModeActive={powerModeActive}
+              powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(2)}
               onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
@@ -1996,7 +1999,7 @@ export default function Game() {
               powerSelectedCards={buildSelectedPowerCards(1)}
               swapCueCards={buildSwapCueCards(p2.id)}
               powerConfirmCards={buildPowerConfirmCards(p2.id)}
-              powerModeActive={powerModeActive}
+              powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(1)}
               onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
@@ -2039,7 +2042,7 @@ export default function Game() {
               powerSelectedCards={buildSelectedPowerCards(3)}
               swapCueCards={buildSwapCueCards(p4.id)}
               powerConfirmCards={buildPowerConfirmCards(p4.id)}
-              powerModeActive={powerModeActive}
+              powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(3)}
               onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
@@ -2086,22 +2089,7 @@ export default function Game() {
                   {calcVisibleScore(p1)} pts
                 </span>
               </div>
-              {swapMode && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  style={{
-                    background: 'rgba(255,193,7,0.15)',
-                    border: '2px solid rgba(255,193,7,0.6)',
-                    borderRadius: 50, padding: '4px 14px',
-                    fontSize: 12, fontWeight: 800, color: '#FFC107',
-                    fontFamily: 'Nunito',
-                  }}
-                >
-                  ⬆ TAP A CARD TO SWAP
-                </motion.div>
-              )}
-              {isMyTurn && pendingPower === '7' && (
+              {powerInteractionActive && pendingPower === '7' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -2116,7 +2104,7 @@ export default function Game() {
                   👁 TAP A FACE-DOWN CARD
                 </motion.div>
               )}
-              {isMyTurn && pendingPower === '9' && (
+              {powerInteractionActive && pendingPower === '9' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -2131,7 +2119,7 @@ export default function Game() {
                   {powerSelections.length < 2 ? `👀 PICK ${2 - powerSelections.length} CARD${powerSelections.length === 1 ? '' : 'S'} TO PEEK` : '👀 SWAP OR KEEP'}
                 </motion.div>
               )}
-              {isMyTurn && pendingPower === '10' && (
+              {powerInteractionActive && pendingPower === '10' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -2178,7 +2166,7 @@ export default function Game() {
               powerSelectedCards={buildSelectedPowerCards(0)}
               swapCueCards={buildSwapCueCards(p1.id)}
               powerConfirmCards={buildPowerConfirmCards(p1.id)}
-              powerModeActive={powerModeActive}
+              powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(0)}
               onPowerClick={(row, col) => handlePowerCardClick(0, row, col)}
@@ -2274,13 +2262,12 @@ export default function Game() {
               fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
               fontFamily: 'Nunito', textAlign: 'center',
             }}>
-              {phase === 'power' && isMyTurn && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
-              {phase === 'power' && isMyTurn && pendingPower === '8' && '🕵️ Tap one opponent card to spy, or skip'}
-              {phase === 'power' && isMyTurn && pendingPower === '9' && powerSelections.length < 2 && '👀 Pick 2 cards from 2 different players'}
-              {phase === 'power' && isMyTurn && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
-              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
-              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
-              {phase === 'power' && isMyTurn && pendingPower === '10' && powerSelections.length === 2 && '🔀 Blind swap sent. Waiting for game state update...'}
+              {powerInteractionActive && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
+              {powerInteractionActive && pendingPower === '8' && '🕵️ Tap one opponent card to spy, or skip'}
+              {powerInteractionActive && pendingPower === '9' && powerSelections.length < 2 && '👀 Pick 2 cards from 2 different players'}
+              {powerInteractionActive && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
+              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
+              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
               {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
               {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
               {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
