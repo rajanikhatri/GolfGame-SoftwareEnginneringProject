@@ -1271,13 +1271,29 @@ export default function Game() {
     }
   }, [matchWindowActive]);
 
+  const selectedSwapCueActive =
+    phase === 'power' &&
+    isMyTurn &&
+    currentPlayerIndex === 0 &&
+    players[0]?.id === myPlayerId &&
+    (pendingPower === '9' || pendingPower === '10') &&
+    powerSelections.length === 1 &&
+    !powerSwapAnimation;
+
+  useEffect(() => {
+    if (!selectedSwapCueActive) {
+      setSelectedPowerCueAnchor(null);
+    }
+  }, [selectedSwapCueActive]);
+
+  useEffect(() => {
+    if (powerSwapAnimation) {
+      setSelectedPowerCueAnchor(null);
+    }
+  }, [powerSwapAnimation]);
+
   useLayoutEffect(() => {
-    const selectedSwapCard = (
-      phase === 'power' &&
-      isMyTurn &&
-      (pendingPower === '9' || pendingPower === '10') &&
-      powerSelections.length === 1
-    )
+    const selectedSwapCard = selectedSwapCueActive
       ? powerSelections[0]
       : null;
 
@@ -1304,9 +1320,7 @@ export default function Game() {
       window.removeEventListener('resize', updateAnchor);
     };
   }, [
-    phase,
-    isMyTurn,
-    pendingPower,
+    selectedSwapCueActive,
     powerSelections,
     measureCardAnchor,
   ]);
@@ -1394,6 +1408,7 @@ export default function Game() {
         if (powerSwapGlowTimerRef.current) clearTimeout(powerSwapGlowTimerRef.current);
         if (powerSwapAnimationTimerRef.current) clearTimeout(powerSwapAnimationTimerRef.current);
         if (powerCompletionTimerRef.current) clearTimeout(powerCompletionTimerRef.current);
+        setSelectedPowerCueAnchor(null);
         setPowerConfirmCards(changedSlots);
         powerConfirmTimerRef.current = setTimeout(() => {
           setPowerConfirmCards([]);
@@ -1645,12 +1660,7 @@ export default function Game() {
 
   const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
   const reactionMode = matchWindowActive;
-  const swapPowerCueActive =
-    phase === 'power' &&
-    isMyTurn &&
-    (pendingPower === '9' || pendingPower === '10') &&
-    powerSelections.length === 1;
-  const swapPowerCueSize = 78;
+  const swapPowerCueSize = 68;
   const statusLabel = pendingPower === '7'
     ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
     : pendingPower === '8'
@@ -1706,12 +1716,12 @@ export default function Game() {
       }} />
 
       <AnimatePresence>
-        {swapPowerCueActive && selectedPowerCueAnchor && (
+        {selectedSwapCueActive && selectedPowerCueAnchor && (
           <HandCue
             size={swapPowerCueSize}
             style={{
-              left: selectedPowerCueAnchor.x - swapPowerCueSize * 0.18,
-              top: selectedPowerCueAnchor.y - selectedPowerCueAnchor.height * 0.96 - swapPowerCueSize * 0.18,
+              left: selectedPowerCueAnchor.x - swapPowerCueSize / 2,
+              top: selectedPowerCueAnchor.y - swapPowerCueSize / 2,
               zIndex: 34,
             }}
           />
