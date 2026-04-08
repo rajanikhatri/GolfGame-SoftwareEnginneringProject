@@ -1529,6 +1529,7 @@ export default function Game() {
 
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
+    setSelectedPowerCueAnchor(null);
     confirmPower9(doSwap, powerSelections.map(selection => ({
       playerId: selection.playerId,
       cardFlatIndex: selection.cardFlatIndex,
@@ -1577,6 +1578,7 @@ export default function Game() {
       setPowerSelections(nextSelections);
 
       if (nextSelections.length === 2) {
+        setSelectedPowerCueAnchor(null);
         usePower10(
           { playerId: nextSelections[0].playerId, cardFlatIndex: nextSelections[0].cardFlatIndex },
           { playerId: nextSelections[1].playerId, cardFlatIndex: nextSelections[1].cardFlatIndex },

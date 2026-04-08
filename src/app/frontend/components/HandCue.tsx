@@ -37,7 +37,7 @@ export function HandCue({
         y: [6, 0, 6],
         scale: [0.98, 1, 0.98],
       }}
-      exit={{ opacity: 0, y: -8, scale: 0.88 }}
+      exit={{ opacity: 0, y: -8, scale: 0.88, transition: { duration: 0.25, ease: 'easeOut' } }}
       transition={{
         duration: 1.8,
         repeat: Infinity,
