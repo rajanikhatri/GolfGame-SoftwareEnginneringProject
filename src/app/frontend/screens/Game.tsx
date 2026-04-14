@@ -1201,6 +1201,7 @@ function countCardsInHand(player: Player): number {
 export default function Game() {
   const navigate = useNavigate();
   const gameRootRef = useRef<HTMLDivElement | null>(null);
+  const pileAreaNodeRef = useRef<HTMLDivElement | null>(null);
   const cardNodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const drawPerfStartRef = useRef<number | null>(null);
   const {
@@ -1465,20 +1466,35 @@ export default function Game() {
         (previousPendingPower === '9' || previousPendingPower === '10') &&
         changedSlots.length >= 2;
 
+      // Helper: measure the center pile area position (available on every client's screen)
+      const measurePileAnchor = (): CardAnchor | null => {
+        const rootNode = gameRootRef.current;
+        const pileNode = pileAreaNodeRef.current;
+        if (!rootNode || !pileNode) return null;
+        const rootRect = rootNode.getBoundingClientRect();
+        const pileRect = pileNode.getBoundingClientRect();
+        return {
+          x: pileRect.left - rootRect.left + pileRect.width / 2,
+          y: pileRect.top - rootRect.top + pileRect.height / 2,
+          width: pileRect.width,
+          height: pileRect.height,
+        };
+      };
+
       if (shouldConfirmPowerSwap) {
-        const selectedSwapCards = powerSelections.slice(0, 2);
-        const firstSwapAnchor = selectedSwapCards[0]
+        // Power 9 / 10: derive anchors from changedSlots — visible to ALL players, not just the acting player
+        const firstSwapAnchor = changedSlots[0]
           ? measureCardAnchor(
-              selectedSwapCards[0].playerId,
-              selectedSwapCards[0].row,
-              selectedSwapCards[0].col,
+              changedSlots[0].playerId,
+              changedSlots[0].row,
+              changedSlots[0].col,
             )
           : null;
-        const secondSwapAnchor = selectedSwapCards[1]
+        const secondSwapAnchor = changedSlots[1]
           ? measureCardAnchor(
-              selectedSwapCards[1].playerId,
-              selectedSwapCards[1].row,
-              selectedSwapCards[1].col,
+              changedSlots[1].playerId,
+              changedSlots[1].row,
+              changedSlots[1].col,
             )
           : null;
 
@@ -1510,6 +1526,34 @@ export default function Game() {
         powerCompletionTimerRef.current = setTimeout(() => {
           setPowerCompletionLabel(null);
         }, 1400);
+      } else if (previousPhase === 'swap' && changedSlots.length >= 1) {
+        // Normal draw-swap (deck or discard → hand): arc from pile area to the changed hand slot
+        const pileAnchor = measurePileAnchor();
+        const handAnchor = changedSlots[0]
+          ? measureCardAnchor(
+              changedSlots[0].playerId,
+              changedSlots[0].row,
+              changedSlots[0].col,
+            )
+          : null;
+
+        if (powerConfirmTimerRef.current) clearTimeout(powerConfirmTimerRef.current);
+        if (powerSwapGlowTimerRef.current) clearTimeout(powerSwapGlowTimerRef.current);
+        if (powerSwapAnimationTimerRef.current) clearTimeout(powerSwapAnimationTimerRef.current);
+        setPowerConfirmCards(changedSlots);
+        powerConfirmTimerRef.current = setTimeout(() => {
+          setPowerConfirmCards([]);
+        }, 1200);
+        if (pileAnchor && handAnchor) {
+          setPowerSwapAnimation({ from: pileAnchor, to: handAnchor });
+          powerSwapAnimationTimerRef.current = setTimeout(() => {
+            setPowerSwapAnimation(null);
+          }, 1050);
+        }
+        setPowerSwapGlowCardIds(uniqueChangedCardIds);
+        powerSwapGlowTimerRef.current = setTimeout(() => {
+          setPowerSwapGlowCardIds([]);
+        }, 3500);
       } else {
         setPowerConfirmCards([]);
       }
@@ -1519,7 +1563,7 @@ export default function Game() {
     prevMatchWindowRef.current = matchWindowActive;
     prevPhaseRef.current = phase;
     prevPendingPowerRef.current = pendingPower;
-  }, [players, matchWindowActive, phase, pendingPower, powerSelections, measureCardAnchor]);
+  }, [players, matchWindowActive, phase, pendingPower, measureCardAnchor]);
 
   useEffect(() => () => {
     if (discardLandingTimerRef.current) clearTimeout(discardLandingTimerRef.current);
@@ -2151,7 +2195,7 @@ export default function Game() {
         </div>
 
         {/* Center area */}
-        <div style={{
+        <div ref={pileAreaNodeRef} style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '8px 24px',
         }}>
