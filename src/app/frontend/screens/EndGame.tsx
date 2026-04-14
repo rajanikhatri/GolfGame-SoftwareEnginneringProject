@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Star, RotateCcw, Home } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
@@ -33,12 +34,16 @@ export default function EndGame() {
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
 
   const handlePlayAgain = () => {
-    initGame();
+    flushSync(() => {
+      initGame();
+    });
     navigate('/game');
   };
 
   const handleMenu = () => {
-    resetGame();
+    flushSync(() => {
+      resetGame();
+    });
     navigate('/');
   };
 

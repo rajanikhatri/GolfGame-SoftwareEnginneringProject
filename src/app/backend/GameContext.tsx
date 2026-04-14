@@ -1238,7 +1238,23 @@ return () => clearTimeout(timer);
 
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
-      syncConfirmPower9(roomCodeRef.current, doSwap).catch(console.error);
+      if (selections.length < 2) return;
+
+      (async () => {
+        // Local UI tracks Power 9 selections optimistically, but Firestore remains
+        // authoritative. Re-send both selections before confirming so the first
+        // confirm click still succeeds even if the selection transactions are
+        // still in flight.
+        for (const selection of selections) {
+          await syncSelectPower9Card(
+            roomCodeRef.current,
+            selection.playerId,
+            selection.cardFlatIndex,
+          );
+        }
+
+        await syncConfirmPower9(roomCodeRef.current, doSwap);
+      })().catch(console.error);
       return;
     }
 
