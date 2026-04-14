@@ -136,6 +136,7 @@ export default function Lobby() {
   };
 
   const handleStartGame = async () => {
+    if (!isHost || !allReady) return;
     if (gameMode === 'multiplayer' && roomCode) {
       try {
         setStartError(null);
@@ -456,7 +457,7 @@ export default function Lobby() {
               opacity: isHost && allReady ? 1 : 0.5,
               cursor: isHost && allReady ? 'pointer' : 'not-allowed',
             }}
-            onClick={isHost && allReady ? handleStartGame : undefined}
+            onClick={handleStartGame}
           >
             {!isHost
               ? '⏳ WAITING FOR HOST TO START...'

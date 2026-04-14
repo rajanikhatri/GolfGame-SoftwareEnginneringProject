@@ -1045,7 +1045,7 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={canDraw ? onDraw : undefined}
+            onClick={onDraw}
             style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
           >
             {/* Stack shadow layers */}
@@ -1103,7 +1103,7 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={canDraw && discardTop ? onTakeDiscard : undefined}
+            onClick={onTakeDiscard}
             style={{ cursor: canDraw && discardTop ? 'pointer' : 'default', position: 'relative' }}
           >
             {discardPile.slice(1, 4).reverse().map((card, i) => (
