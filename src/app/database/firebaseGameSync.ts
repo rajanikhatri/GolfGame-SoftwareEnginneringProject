@@ -187,3 +187,12 @@ export async function syncKnock(roomCode: string): Promise<void> {
 export async function syncRemovePlayer(roomCode: string, playerId: string): Promise<void> {
   await applyAction(roomCode, state => removePlayer(state, playerId));
 }
+
+// Sets or clears the UI-only powerFocusTargetId field so all connected clients
+// can highlight the targeted opponent's panel in real time during power cards 8/9/10.
+export async function syncSetPowerFocusTarget(
+  roomCode: string,
+  targetPlayerId: string | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, powerFocusTargetId: targetPlayerId }));
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
@@ -170,7 +171,9 @@ export default function ModeSelection() {
   }
 
   function handleSoloPlay() {
-    setGameMode('solo');
+    flushSync(() => {
+      setGameMode('solo');
+    });
     navigate('/lobby');
   }
 
@@ -211,9 +214,11 @@ export default function ModeSelection() {
         color: '#1E88E5',
         glowColor: 'rgba(30,136,229,0.7)',
       });
-      setPlayerName(name);
-      setRoomCode(room.id);
-      setGameMode('multiplayer');
+      flushSync(() => {
+        setPlayerName(name);
+        setRoomCode(room.id);
+        setGameMode('multiplayer');
+      });
       navigate('/lobby');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to join room.');
@@ -239,11 +244,13 @@ export default function ModeSelection() {
         { name, avatar: '🎮', color: '#1E88E5', glowColor: 'rgba(30,136,229,0.7)' },
         { roomName: roomNameInput.trim(), maxPlayers, password: roomPassword },
       );
-      setCreatedRoomCode(code);
-      setPlayerName(name);
-      setRoomCode(code);
-      setGameMode('multiplayer');
-      setStep('waiting-room');
+      flushSync(() => {
+        setCreatedRoomCode(code);
+        setPlayerName(name);
+        setRoomCode(code);
+        setGameMode('multiplayer');
+        setStep('waiting-room');
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create room.');
     } finally {

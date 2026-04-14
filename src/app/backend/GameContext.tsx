@@ -20,6 +20,7 @@ import {
   saveInitialGameState,
   syncRemovePlayer,
   syncGiveAwayCard,
+  syncSetPowerFocusTarget,
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
@@ -41,6 +42,22 @@ import {
   type GameState,
   type GamePhase as EnginePhase,
 } from './gameEngine';
+
+type PerfGlobal = typeof globalThis & {
+  __GOLF_DEBUG_PERF__?: boolean;
+};
+
+function isPerfDebugEnabled() {
+  if (!import.meta.env.DEV) return false;
+
+  const perfGlobal = globalThis as PerfGlobal;
+  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
+  const storageFlag =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('golf:debug-perf') === '1';
+
+  return globalFlag || storageFlag;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,7 +145,10 @@ interface GameContextType {
   chatMessages: ChatMessage[];
   lastPlayedCard: Card | null;
   pendingPower: '7' | '8' | '9' | '10' | null;
+  power9Selection: { playerId: string; cardIndex: number }[] | null;
+  powerFocusTargetId: string | null;
   giveawayGiverId: string | null;
+  setFocusTarget: (targetPlayerId: string | null) => void;
   // Called from Lobby when game is about to start (multiplayer).
   // Host passes roomPlayerIds to create the deck in Firestore; joiners omit it.
   initMultiplayer: (
@@ -253,6 +273,64 @@ function createMemoryKey(playerId: string, cardIndex: number): string {
   return `${playerId}:${cardIndex}`;
 }
 
+function cardsMatchForRender(
+  previousCards: (Card | null)[][],
+  nextCards: (Card | null)[][],
+): boolean {
+  if (previousCards.length !== nextCards.length) return false;
+
+  for (let row = 0; row < previousCards.length; row++) {
+    const previousRow = previousCards[row] ?? [];
+    const nextRow = nextCards[row] ?? [];
+    if (previousRow.length !== nextRow.length) return false;
+
+    for (let col = 0; col < previousRow.length; col++) {
+      const previousCard = previousRow[col];
+      const nextCard = nextRow[col];
+
+      if (previousCard === nextCard) continue;
+      if (!previousCard || !nextCard) {
+        if (previousCard !== nextCard) return false;
+        continue;
+      }
+
+      if (
+        previousCard.id !== nextCard.id ||
+        previousCard.faceUp !== nextCard.faceUp ||
+        previousCard.rank !== nextCard.rank ||
+        previousCard.suit !== nextCard.suit ||
+        previousCard.value !== nextCard.value
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function reuseStablePlayers(previousPlayers: Player[], nextPlayers: Player[]): Player[] {
+  if (previousPlayers.length === 0) return nextPlayers;
+
+  return nextPlayers.map(nextPlayer => {
+    const previousPlayer = previousPlayers.find(player => player.id === nextPlayer.id);
+    if (!previousPlayer) return nextPlayer;
+
+    const samePlayer =
+      previousPlayer.name === nextPlayer.name &&
+      previousPlayer.avatar === nextPlayer.avatar &&
+      previousPlayer.color === nextPlayer.color &&
+      previousPlayer.glowColor === nextPlayer.glowColor &&
+      previousPlayer.score === nextPlayer.score &&
+      previousPlayer.isAI === nextPlayer.isAI &&
+      previousPlayer.isReady === nextPlayer.isReady &&
+      previousPlayer.hasKnocked === nextPlayer.hasKnocked &&
+      cardsMatchForRender(previousPlayer.cards, nextPlayer.cards);
+
+    return samePlayer ? previousPlayer : nextPlayer;
+  });
+}
+
 // Convert engine GameState → local Player[] (reordered so myPlayerId is first)
 function engineStateToPlayers(
   state: GameState,
@@ -346,6 +424,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages,       setChatMessages]       = useState<ChatMessage[]>(LOBBY_MESSAGES);
   const [lastPlayedCard,     setLastPlayedCard]     = useState<Card | null>(null);
   const [pendingPower,          setPendingPower]          = useState<'7' | '8' | '9' | '10' | null>(null);
+  const [power9Selection,       setPower9Selection]       = useState<{ playerId: string; cardIndex: number }[] | null>(null);
+  const [powerFocusTargetId,    setPowerFocusTargetId]    = useState<string | null>(null);
   const [giveawayGiverId,       setGiveawayGiverId]       = useState<string | null>(null);
   const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string | null>(null);
   const [swapCountdown,         setSwapCountdown]         = useState<number | null>(null);
@@ -509,7 +589,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { players: newPlayers, localCurrentIndex } =
       engineStateToPlayers(state, playerProfilesRef.current, myPlayerIdRef.current);
 
-    setPlayers(newPlayers);
+    setPlayers(previousPlayers => {
+      const nextPlayers = reuseStablePlayers(previousPlayers, newPlayers);
+
+      if (isPerfDebugEnabled()) {
+        const reusedPlayers = nextPlayers.filter((player, index) => player === previousPlayers[index]).length;
+        console.debug('[perf] applyEngineState', {
+          phase: state.phase,
+          drawPile: state.drawPile.length,
+          discardPile: state.discardPile.length,
+          drawnCard: state.drawnCard?.id ?? null,
+          reusedPlayers,
+          totalPlayers: nextPlayers.length,
+        });
+      }
+
+      return nextPlayers;
+    });
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(localCurrentIndex);
@@ -526,6 +622,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setKnockedBy(state.knockedById);
     setMatchWindowActive(state.reactionWindowOpen);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
+    setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
+    setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
 
@@ -1195,9 +1293,34 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [gameMode]);
 
+  // Immediately writes powerFocusTargetId to Firestore so all non-acting clients
+  // can highlight the targeted player's panel in real time (powers 8/10).
+  // Power 9 target is derived from power9Selection which is already synced by selectPower9Card.
+  const setFocusTargetAction = useCallback((targetPlayerId: string | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerFocusTarget(roomCodeRef.current, targetPlayerId).catch(console.error);
+    }
+  }, [gameMode]);
+
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
-      syncConfirmPower9(roomCodeRef.current, doSwap).catch(console.error);
+      if (selections.length < 2) return;
+
+      (async () => {
+        // Local UI tracks Power 9 selections optimistically, but Firestore remains
+        // authoritative. Re-send both selections before confirming so the first
+        // confirm click still succeeds even if the selection transactions are
+        // still in flight.
+        for (const selection of selections) {
+          await syncSelectPower9Card(
+            roomCodeRef.current,
+            selection.playerId,
+            selection.cardFlatIndex,
+          );
+        }
+
+        await syncConfirmPower9(roomCodeRef.current, doSwap);
+      })().catch(console.error);
       return;
     }
 
@@ -1293,7 +1416,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard,
-      pendingPower, giveawayGiverId,
+      pendingPower, power9Selection, powerFocusTargetId, giveawayGiverId,
+      setFocusTarget: setFocusTargetAction,
       swapCountdown,
       disconnectedPlayerName,
       initMultiplayer,

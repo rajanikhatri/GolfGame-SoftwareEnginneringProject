@@ -1,90 +1,79 @@
-# Golf Card Game - Multiplayer Edition
+# Golf Card Game
 
-A web-based multiplayer card game built for CS 440 Software Engineering (Spring 2026).
-Players compete to achieve the lowest cumulative score using memory, strategy, and power cards.
+This project is a web-based multiplayer version of the Golf card game. It was built for a software engineering class and focuses on strategy, memory, and real-time play. Players can create or join rooms, play with other people online, or try the game in solo mode.
 
-**Team:** Mandeep Aryal, Rajani Khatri, Sushant Dahal, Rita Ghimire, Nitish Baidya, Priyanka Pandit
+## Tools Needed
 
----
+- Node.js
+- npm
+- A modern browser like Chrome, Edge, or Firefox
 
-## How to Run Locally
+This project also uses Firebase for authentication and multiplayer data. The current Firebase setup is already connected in the project files.
+
+## Install Dependencies
+
+Open the project folder in a terminal and run:
 
 ```bash
 npm install
+```
+
+## Run the Project
+
+Start the development server with:
+
+```bash
 npm run dev
 ```
 
-Then open `http://localhost:5173` in your browser.
+Then open the local link shown in the terminal. In most cases, it will be:
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, TypeScript, Vite |
-| Styling | Tailwind CSS, custom CSS animations |
-| Routing | React Router v7 |
-| Database | Firebase Firestore |
-| Auth | Firebase Authentication |
-| Animations | Motion (motion/react) |
-| Icons | Lucide React |
-
----
-
-## Project Structure
-
-```
-src/
-  app/
-    auth/               # Login, register, auth gate (blocks access until signed in)
-    backend/            # Game logic and state (GameContext)
-    database/           # Firebase setup, Firestore room functions
-    frontend/
-      screens/          # UI screens (ModeSelection, Lobby, Game, EndGame)
-      components/       # Reusable UI components (GameCard, Confetti)
-  main.tsx              # App entry point
-  styles/               # Global CSS, Tailwind, fonts, theme, animations
-
-documentation/          # Project proposal and explanation docs
-requirements.txt        # List of all packages and install instructions
+```text
+http://localhost:5173
 ```
 
----
+## Build the Project
 
-## Features
+If you want to make a production build, run:
 
-- **Authentication** — Register and login with email/password via Firebase
-- **Solo vs AI** — Play against 3 AI opponents offline
-- **Multiplayer** — Create or join real-time rooms with up to 4 players
-- **Room System** — Public and password-protected rooms
-- **Real-time Lobby** — See players join live using Firestore listeners
-- **Power Cards** — Special abilities for cards 7, 8, 9, 10
-- **Knock Mechanic** — End the game when you think you have the lowest score
-- **Match Window** — 3-second reaction window for matching discards
-- **Live Chat** — In-lobby chat between players
+```bash
+npm run build
+```
 
----
+## Technologies Used
 
-## Game Rules Summary
+- React
+- TypeScript
+- Vite
+- Firebase Authentication
+- Firebase Firestore
+- Firebase Realtime Database
+- React Router
+- Motion
+- Lottie React
+- Tailwind CSS
+- Custom CSS
 
-- Each player gets 4 cards (2×2 grid), face down
-- Peek at 2 of your cards for 5 seconds at the start
-- On your turn: draw from deck or take top discard, then swap or discard
-- **Lowest score wins** — negative values are good
-- **Black King = -2 pts**, **Joker = -1 pt**
-- Matching column cards cancel out (0 points)
-- Power cards (7/8/9/10) activate special abilities when drawn
-- Any player can **Knock** to trigger the final round
+## How the Game Works
 
+Each player starts with 4 cards. At the start of the round, players get a short look at their bottom 2 cards and then the cards are hidden again. On each turn, a player draws one card from the deck or takes the top card from the discard pile. After that, they decide whether to swap it with one of their cards or discard it.
 
----
+The goal is to finish with the lowest score. Some cards have special effects. Power cards let players peek at cards or swap cards in different ways. A player can also knock when they think they have the lowest score, which starts the final round.
 
-## Firebase Setup
+## Short Feature Notes
 
-The app uses Firebase project `golfgame-ee8bf`.
-Config is stored in `src/app/database/firebase.ts`.
+- Email login and registration
+- Solo mode and multiplayer mode
+- Room creation and room join by code
+- Public and password-protected rooms
+- Real-time lobby updates
+- Real-time multiplayer gameplay
+- Power cards for 7, 8, 9, and 10
+- Knock and final round system
+- Reaction window for matching discards
+- Game animations and card movement
+- Power-card guidance cues and swap feedback
 
-**Required Firebase services:**
-- Authentication → Email/Password + Anonymous enabled
-- Firestore Database → with security rules for `users` and `rooms` collections
+## Project Notes
+
+The game logic is separated from the UI, which made it easier to manage rules and multiplayer updates. Firebase is used to keep room data and game state synced between players. The project also includes animation work to make card actions easier to understand during gameplay.
