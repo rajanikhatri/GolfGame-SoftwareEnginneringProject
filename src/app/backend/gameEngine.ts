@@ -54,6 +54,9 @@ export interface GameState {
   scores: Record<string, number>;
   // Power 9: tracks which two cards are being peeked before optional swap
   power9Selection: { playerId: string; cardIndex: number }[] | null;
+  // UI-only: the opponent whose panel should glow on non-acting players' screens
+  // while power 8/9/10 is in progress. Set by the acting player, read by everyone.
+  powerFocusTargetId?: string | null;
 
   pendingGiveaway: {
     giverId: string;
@@ -133,6 +136,7 @@ export function createInitialGameState(playerIds: string[]): GameState {
     gameOver: false,
     scores: {},
     power9Selection: null,
+    powerFocusTargetId: null,
     pendingGiveaway: null,
   };
 }
@@ -270,6 +274,7 @@ function drawOnePenaltyCard(
       gameOver: false,
       scores: {},
       power9Selection: null,
+      powerFocusTargetId: null,
       pendingGiveaway: null,
     } as GameState);
 
@@ -309,6 +314,7 @@ export function advanceTurn(state: GameState): GameState {
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
     pendingGiveaway: null,
   };
 }
@@ -413,7 +419,7 @@ export function takeFromDiscard(state: GameState, playerId: string): GameState {
 export function skipPower(state: GameState, playerId: string): GameState {
   if (state.phase !== 'power') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  return { ...state, phase: 'swap', pendingPower: null };
+  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null };
 }
 
 function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
@@ -432,6 +438,7 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
     reactionWindowOpen: true,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
   };
 }
 
@@ -805,6 +812,7 @@ export function knock(state: GameState, playerId: string): GameState {
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
   };
 
   // Knocking uses up the current player's turn immediately.

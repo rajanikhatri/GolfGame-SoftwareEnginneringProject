@@ -478,6 +478,56 @@ function PowerPanelCue({
   );
 }
 
+// ─── Power Notification Popup ────────────────────────────────────────────────
+function PowerNotificationPopup({ actorName, powerCard }: { actorName: string; powerCard: string }) {
+  const cfg = POWER_CONFIG[powerCard as PowerTone];
+  if (!cfg) return null;
+  return (
+    <motion.div
+      aria-live="polite"
+      initial={{ opacity: 0, scale: 0.82, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.88, y: -14, transition: { duration: 0.28, ease: 'easeIn' } }}
+      transition={{ duration: 0.36, ease: 'easeOut' }}
+      style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 85,
+        pointerEvents: 'none',
+        background: cfg.bg,
+        backgroundSize: '200% auto',
+        borderRadius: 22,
+        border: '2px solid rgba(255,255,255,0.38)',
+        padding: '20px 36px',
+        textAlign: 'center',
+        boxShadow: `${cfg.shadow}, 0 24px 48px rgba(0,0,0,0.45)`,
+        minWidth: 240,
+      }}
+    >
+      <div style={{
+        fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.7)',
+        fontFamily: 'Nunito', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8,
+      }}>
+        ⚡ Power Card Activated
+      </div>
+      <div style={{
+        fontSize: 26, fontWeight: 900, color: 'white',
+        fontFamily: 'Nunito', textShadow: '0 2px 10px rgba(0,0,0,0.45)', marginBottom: 4,
+      }}>
+        {actorName}
+      </div>
+      <div style={{
+        fontSize: 15, fontWeight: 800, color: 'rgba(255,255,255,0.88)',
+        fontFamily: 'Nunito',
+      }}>
+        {cfg.title}
+      </div>
+    </motion.div>
+  );
+}
+
 interface GridSelection {
   row: number;
   col: number;
@@ -1249,12 +1299,15 @@ export default function Game() {
     col: number;
   } | null>(null);
   const [discardLandingPlayerIds, setDiscardLandingPlayerIds] = useState<string[]>([]);
+  const [powerNotification, setPowerNotification] = useState<{ actorName: string; powerCard: string } | null>(null);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardLandingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerSwapGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerSwapAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powerCompletionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const powerNotificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevNotifPendingPowerRef = useRef<typeof pendingPower>(pendingPower);
   const prevPlayersRef = useRef<Player[]>([]);
   const prevMatchWindowRef = useRef(matchWindowActive);
   const prevPhaseRef = useRef(phase);
@@ -1343,6 +1396,28 @@ export default function Game() {
     setPowerSelections(prev => (prev.length === 0 ? prev : []));
     setSelectedPowerCueAnchor(null);
   }, [phase, pendingPower, isMyTurn, currentPlayerIndex]);
+
+  // Global power notification — fires for all non-acting players when a new power is activated
+  useEffect(() => {
+    const wasNull = prevNotifPendingPowerRef.current == null;
+    const isNewPower = wasNull && pendingPower != null;
+
+    if (pendingPower == null) {
+      // Power ended — immediately clear any in-flight notification
+      if (powerNotificationTimerRef.current) clearTimeout(powerNotificationTimerRef.current);
+      setPowerNotification(null);
+    } else if (isNewPower && currentPlayerIndex !== 0 && players.length > 0) {
+      // New power activated by someone other than the local player
+      const actorName = players[currentPlayerIndex]?.name ?? 'A player';
+      if (powerNotificationTimerRef.current) clearTimeout(powerNotificationTimerRef.current);
+      setPowerNotification({ actorName, powerCard: pendingPower });
+      powerNotificationTimerRef.current = setTimeout(() => {
+        setPowerNotification(null);
+      }, 2400);
+    }
+
+    prevNotifPendingPowerRef.current = pendingPower;
+  }, [pendingPower, players, currentPlayerIndex]);
 
   useEffect(() => {
     if (!matchWindowActive) {
@@ -1571,6 +1646,7 @@ export default function Game() {
     if (powerSwapGlowTimerRef.current) clearTimeout(powerSwapGlowTimerRef.current);
     if (powerSwapAnimationTimerRef.current) clearTimeout(powerSwapAnimationTimerRef.current);
     if (powerCompletionTimerRef.current) clearTimeout(powerCompletionTimerRef.current);
+    if (powerNotificationTimerRef.current) clearTimeout(powerNotificationTimerRef.current);
   }, []);
 
   const handleCardClick = useCallback((row: number, col: number) => {
@@ -1849,6 +1925,39 @@ export default function Game() {
 
   const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
   const reactionMode = matchWindowActive;
+
+  // ─── Focus mode: opponent-side spotlight/dim for power-card actions ─────────
+  // Both signals come from shared Firestore state, so they fire on ALL clients
+  // simultaneously as soon as the power-card phase starts.
+  //
+  // Rule: the acting player's OWN screen is never affected — they already have the
+  // full PowerBanner + interaction UI. Only the non-acting players' screens show
+  // the spotlight + dim.
+  //
+  // Note: real-time per-card target highlighting (while the acting player is still
+  // picking) is not feasible here because the card selections live in local state
+  // (powerSelections) and are not broadcast until the action commits to Firestore.
+  const powerFocusActive = phase === 'power' && Boolean(pendingPower);
+
+  const getPlayerFocusStyle = (playerIndex: number) => {
+    if (!powerFocusActive) return {};
+    // Local player is the acting player → their screen stays completely normal.
+    // currentPlayerIndex === 0 means engineStateToPlayers placed the local player
+    // first, so the acting player (index 0 in the local view) IS the local user.
+    if (currentPlayerIndex === 0) return {};
+    // Non-acting player's screen: spotlight the acting player, dim everyone else.
+    const isActing = playerIndex === currentPlayerIndex;
+    if (isActing) return {
+      borderRadius: 16,
+      boxShadow: '0 0 0 3px rgba(255, 200, 30, 0.84), 0 0 44px rgba(255, 180, 0, 0.55)',
+      transition: 'opacity 0.4s ease, filter 0.4s ease, box-shadow 0.4s ease',
+    };
+    return {
+      opacity: 0.35,
+      filter: 'brightness(0.55) saturate(0.4)',
+      transition: 'opacity 0.4s ease, filter 0.4s ease',
+    };
+  };
   const swapPowerCueSize = 68;
   const statusLabel = pendingPower === '7'
     ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
@@ -1923,6 +2032,16 @@ export default function Game() {
           <SwapExchangeCue
             from={powerSwapAnimation.from}
             to={powerSwapAnimation.to}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Power notification — center popup for non-acting players */}
+      <AnimatePresence>
+        {powerNotification && (
+          <PowerNotificationPopup
+            actorName={powerNotification.actorName}
+            powerCard={powerNotification.powerCard}
           />
         )}
       </AnimatePresence>
@@ -2139,7 +2258,7 @@ export default function Game() {
       }}>
 
         {/* Top player (P3) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', ...getPlayerFocusStyle(2) }}>
           {p3 && (
             <MemoPlayerPanelComp
               player={p3}
@@ -2167,7 +2286,7 @@ export default function Game() {
         </div>
 
         {/* Left player (P2) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', ...getPlayerFocusStyle(1) }}>
           {p2 && (
             <MemoPlayerPanelComp
               player={p2}
@@ -2213,7 +2332,7 @@ export default function Game() {
         </div>
 
         {/* Right player (P4) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...getPlayerFocusStyle(3) }}>
           {p4 && (
             <MemoPlayerPanelComp
               player={p4}
@@ -2241,7 +2360,7 @@ export default function Game() {
         </div>
 
         {/* Bottom player (P1 - YOU) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerFocusStyle(0) }}>
           {/* Player hand */}
           <div style={{
             position: 'relative',

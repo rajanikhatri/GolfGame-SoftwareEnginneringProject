@@ -19,6 +19,7 @@ import {
   saveInitialGameState,
   syncRemovePlayer,
   syncGiveAwayCard,
+  syncSetPowerFocusTarget,
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
@@ -122,7 +123,10 @@ interface GameContextType {
   chatMessages: ChatMessage[];
   lastPlayedCard: Card | null;
   pendingPower: '7' | '8' | '9' | '10' | null;
+  power9Selection: { playerId: string; cardIndex: number }[] | null;
+  powerFocusTargetId: string | null;
   giveawayGiverId: string | null;
+  setFocusTarget: (targetPlayerId: string | null) => void;
   // Called from Lobby when game is about to start (multiplayer).
   // Host passes roomPlayerIds to create the deck in Firestore; joiners omit it.
   initMultiplayer: (
@@ -411,6 +415,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages,       setChatMessages]       = useState<ChatMessage[]>(LOBBY_MESSAGES);
   const [lastPlayedCard,     setLastPlayedCard]     = useState<Card | null>(null);
   const [pendingPower,          setPendingPower]          = useState<'7' | '8' | '9' | '10' | null>(null);
+  const [power9Selection,       setPower9Selection]       = useState<{ playerId: string; cardIndex: number }[] | null>(null);
+  const [powerFocusTargetId,    setPowerFocusTargetId]    = useState<string | null>(null);
   const [giveawayGiverId,       setGiveawayGiverId]       = useState<string | null>(null);
   const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string | null>(null);
   const [swapCountdown,         setSwapCountdown]         = useState<number | null>(null);
@@ -591,6 +597,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setKnockedBy(state.knockedById);
     setMatchWindowActive(state.reactionWindowOpen);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
+    setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
+    setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
 
@@ -1236,6 +1244,15 @@ return () => clearTimeout(timer);
     }
   }, [gameMode]);
 
+  // Immediately writes powerFocusTargetId to Firestore so all non-acting clients
+  // can highlight the targeted player's panel in real time (powers 8/10).
+  // Power 9 target is derived from power9Selection which is already synced by selectPower9Card.
+  const setFocusTargetAction = useCallback((targetPlayerId: string | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerFocusTarget(roomCodeRef.current, targetPlayerId).catch(console.error);
+    }
+  }, [gameMode]);
+
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
       if (selections.length < 2) return;
@@ -1382,7 +1399,8 @@ return () => clearTimeout(timer);
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard,
-      pendingPower, giveawayGiverId,
+      pendingPower, power9Selection, powerFocusTargetId, giveawayGiverId,
+      setFocusTarget: setFocusTargetAction,
       swapCountdown,
       disconnectedPlayerName,
       initMultiplayer,
