@@ -27,6 +27,22 @@ import {
   type GamePhase as EnginePhase,
 } from './gameEngine';
 
+type PerfGlobal = typeof globalThis & {
+  __GOLF_DEBUG_PERF__?: boolean;
+};
+
+function isPerfDebugEnabled() {
+  if (!import.meta.env.DEV) return false;
+
+  const perfGlobal = globalThis as PerfGlobal;
+  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
+  const storageFlag =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('golf:debug-perf') === '1';
+
+  return globalFlag || storageFlag;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Suit = 'hearts' | 'diamonds' | 'spades' | 'clubs' | 'joker';
@@ -242,6 +258,64 @@ function clonePenaltyCard(card: Card, ownerId: string): Card {
 
 function flatIndexToRowCol(flatIndex: number): { row: number; col: number } {
   return { row: Math.floor(flatIndex / 2), col: flatIndex % 2 };
+}
+
+function cardsMatchForRender(
+  previousCards: (Card | null)[][],
+  nextCards: (Card | null)[][],
+): boolean {
+  if (previousCards.length !== nextCards.length) return false;
+
+  for (let row = 0; row < previousCards.length; row++) {
+    const previousRow = previousCards[row] ?? [];
+    const nextRow = nextCards[row] ?? [];
+    if (previousRow.length !== nextRow.length) return false;
+
+    for (let col = 0; col < previousRow.length; col++) {
+      const previousCard = previousRow[col];
+      const nextCard = nextRow[col];
+
+      if (previousCard === nextCard) continue;
+      if (!previousCard || !nextCard) {
+        if (previousCard !== nextCard) return false;
+        continue;
+      }
+
+      if (
+        previousCard.id !== nextCard.id ||
+        previousCard.faceUp !== nextCard.faceUp ||
+        previousCard.rank !== nextCard.rank ||
+        previousCard.suit !== nextCard.suit ||
+        previousCard.value !== nextCard.value
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function reuseStablePlayers(previousPlayers: Player[], nextPlayers: Player[]): Player[] {
+  if (previousPlayers.length === 0) return nextPlayers;
+
+  return nextPlayers.map(nextPlayer => {
+    const previousPlayer = previousPlayers.find(player => player.id === nextPlayer.id);
+    if (!previousPlayer) return nextPlayer;
+
+    const samePlayer =
+      previousPlayer.name === nextPlayer.name &&
+      previousPlayer.avatar === nextPlayer.avatar &&
+      previousPlayer.color === nextPlayer.color &&
+      previousPlayer.glowColor === nextPlayer.glowColor &&
+      previousPlayer.score === nextPlayer.score &&
+      previousPlayer.isAI === nextPlayer.isAI &&
+      previousPlayer.isReady === nextPlayer.isReady &&
+      previousPlayer.hasKnocked === nextPlayer.hasKnocked &&
+      cardsMatchForRender(previousPlayer.cards, nextPlayer.cards);
+
+    return samePlayer ? previousPlayer : nextPlayer;
+  });
 }
 
 // Convert engine GameState → local Player[] (reordered so myPlayerId is first)
@@ -484,7 +558,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { players: newPlayers, localCurrentIndex } =
       engineStateToPlayers(state, playerProfilesRef.current, myPlayerIdRef.current);
 
-    setPlayers(newPlayers);
+    setPlayers(previousPlayers => {
+      const nextPlayers = reuseStablePlayers(previousPlayers, newPlayers);
+
+      if (isPerfDebugEnabled()) {
+        const reusedPlayers = nextPlayers.filter((player, index) => player === previousPlayers[index]).length;
+        console.debug('[perf] applyEngineState', {
+          phase: state.phase,
+          drawPile: state.drawPile.length,
+          discardPile: state.discardPile.length,
+          drawnCard: state.drawnCard?.id ?? null,
+          reusedPlayers,
+          totalPlayers: nextPlayers.length,
+        });
+      }
+
+      return nextPlayers;
+    });
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(localCurrentIndex);

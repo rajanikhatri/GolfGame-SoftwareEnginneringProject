@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { Profiler, memo, type ReactNode, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
@@ -507,6 +507,57 @@ interface PowerSwapAnimation {
   to: CardAnchor;
 }
 
+type PerfGlobal = typeof globalThis & {
+  __GOLF_DEBUG_PERF__?: boolean;
+};
+
+const EMPTY_GRID_SELECTIONS: GridSelection[] = [];
+const EMPTY_ORDERED_GRID_SELECTIONS: OrderedGridSelection[] = [];
+
+function isPerfDebugEnabled() {
+  if (!import.meta.env.DEV) return false;
+
+  const perfGlobal = globalThis as PerfGlobal;
+  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
+  const storageFlag =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('golf:debug-perf') === '1';
+
+  return globalFlag || storageFlag;
+}
+
+function debugPerf(label: string, details?: Record<string, unknown>) {
+  if (!isPerfDebugEnabled()) return;
+  console.debug(`[perf] ${label}`, details ?? {});
+}
+
+function DebugProfiler({
+  id,
+  children,
+}: {
+  id: string;
+  children: ReactNode;
+}) {
+  if (!isPerfDebugEnabled()) return <>{children}</>;
+
+  return (
+    <Profiler
+      id={id}
+      onRender={(profileId, phase, actualDuration, baseDuration, startTime, commitTime) => {
+        console.debug(`[profiler] ${profileId}`, {
+          phase,
+          actualDuration: Number(actualDuration.toFixed(2)),
+          baseDuration: Number(baseDuration.toFixed(2)),
+          startTime: Number(startTime.toFixed(2)),
+          commitTime: Number(commitTime.toFixed(2)),
+        });
+      }}
+    >
+      {children}
+    </Profiler>
+  );
+}
+
 type RegisterCardNode = (
   playerId: string,
   row: number,
@@ -538,6 +589,16 @@ function PlayerCardGrid({
   reactionSelected?: { playerId: string; row: number; col: number } | null;
   registerCardNode?: RegisterCardNode;
 }) {
+  debugPerf(`PlayerCardGrid render:${player.id}`, {
+    isActive,
+    isYou,
+    selectedForSwap: Boolean(selectedForSwap),
+    revealCount: revealCards?.length ?? 0,
+    powerSelectableCount: powerSelectableCards?.length ?? 0,
+    powerSelectedCount: powerSelectedCards?.length ?? 0,
+    reactionSelectable: Boolean(reactionSelectable),
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {player.cards.map((row, ri) => (
@@ -820,6 +881,17 @@ function PlayerPanelComp({
   const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
   const showInstructionalPanelCue = Boolean(isYou && powerModeActive && powerGuideText && powerTone);
 
+  debugPerf(`PlayerPanel render:${player.id}`, {
+    position,
+    isActive,
+    isYou,
+    score,
+    selectedForSwap: Boolean(selectedForSwap),
+    handCount: countCardsInHand(player),
+    hasPowerTargets,
+    reactionSelectable: Boolean(reactionSelectable),
+  });
+
   return (
     <div style={{
       display: 'flex',
@@ -932,6 +1004,8 @@ function PlayerPanelComp({
   );
 }
 
+const MemoPlayerPanelComp = memo(PlayerPanelComp);
+
 // ─── Draw / Discard Piles ─────────────────────────────────────────────────────
 function PileArea({
   drawPile, discardPile, drawnCard, phase, isMyTurn,
@@ -947,6 +1021,14 @@ function PileArea({
 }) {
   const canDraw = isMyTurn && phase === 'draw';
   const discardTop = discardPile[0];
+
+  debugPerf('PileArea render', {
+    canDraw,
+    phase,
+    drawPile: drawPile.length,
+    discardPile: discardPile.length,
+    drawnCard: drawnCard?.id ?? null,
+  });
 
   return (
     <div style={{
@@ -1120,6 +1202,7 @@ export default function Game() {
   const navigate = useNavigate();
   const gameRootRef = useRef<HTMLDivElement | null>(null);
   const cardNodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const drawPerfStartRef = useRef<number | null>(null);
   const {
     myPlayerId,
     players, drawPile, discardPile, currentPlayerIndex,
@@ -1132,13 +1215,13 @@ export default function Game() {
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
-  const [swapMode, setSwapMode] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
   const [peekActive, setPeekActive] = useState(true);
   const p1 = players[0];
   const p2 = players[1];
   const p3 = players[2];
   const p4 = players[3];
+  const swapMode = phase === 'swap' && isMyTurn;
   const canGiveAway = phase === 'giveaway' && giveawayGiverId === p1?.id;
   const giveawayGiverName = players.find(player => player.id === giveawayGiverId)?.name ?? 'Someone';
 
@@ -1229,30 +1312,25 @@ export default function Game() {
     }
   }, [winner, navigate]);
 
-  // Auto-enable swap mode when player draws
-  useEffect(() => {
-    setSwapMode(phase === 'swap' && isMyTurn);
-  }, [phase, isMyTurn]);
-
   // Clear peeked card when power resolves
   useEffect(() => {
     if (!pendingPower) {
-      setPeekedCards([]);
-      setPowerSelections([]);
+      setPeekedCards(prev => (prev.length === 0 ? prev : []));
+      setPowerSelections(prev => (prev.length === 0 ? prev : []));
     }
   }, [pendingPower]);
 
   useEffect(() => {
     if (phase !== 'power') {
-      setPeekedCards([]);
-      setPowerSelections([]);
+      setPeekedCards(prev => (prev.length === 0 ? prev : []));
+      setPowerSelections(prev => (prev.length === 0 ? prev : []));
     }
   }, [phase]);
 
   useEffect(() => {
     if (prevGuidancePowerRef.current !== pendingPower) {
-      setPeekedCards([]);
-      setPowerSelections([]);
+      setPeekedCards(prev => (prev.length === 0 ? prev : []));
+      setPowerSelections(prev => (prev.length === 0 ? prev : []));
       setSelectedPowerCueAnchor(null);
     }
     prevGuidancePowerRef.current = pendingPower;
@@ -1260,8 +1338,8 @@ export default function Game() {
 
   useEffect(() => {
     if (phase === 'power' && pendingPower && isMyTurn && currentPlayerIndex === 0) return;
-    setPeekedCards([]);
-    setPowerSelections([]);
+    setPeekedCards(prev => (prev.length === 0 ? prev : []));
+    setPowerSelections(prev => (prev.length === 0 ? prev : []));
     setSelectedPowerCueAnchor(null);
   }, [phase, pendingPower, isMyTurn, currentPlayerIndex]);
 
@@ -1454,7 +1532,6 @@ export default function Game() {
   const handleCardClick = useCallback((row: number, col: number) => {
     if (phase === 'swap' && isMyTurn) {
       swapCard(row, col);
-      setSwapMode(false);
     }
     if (phase === 'giveaway' && canGiveAway) {
       giveAwayCardAction(row, col);
@@ -1474,35 +1551,44 @@ export default function Game() {
   }, []);
 
   const buildRevealCards = useCallback((playerIndex: number): GridSelection[] => {
-    return peekedCards
+    if (peekedCards.length === 0) return EMPTY_GRID_SELECTIONS;
+
+    const nextRevealCards = peekedCards
       .filter(card => card.playerIndex === playerIndex)
       .map(card => ({ row: card.row, col: card.col }));
+    return nextRevealCards.length > 0 ? nextRevealCards : EMPTY_GRID_SELECTIONS;
   }, [peekedCards]);
 
   const buildSelectedPowerCards = useCallback((playerIndex: number): OrderedGridSelection[] => {
-    return powerSelections.flatMap((selection, index) => (
+    if (powerSelections.length === 0) return EMPTY_ORDERED_GRID_SELECTIONS;
+
+    const nextSelectedPowerCards = powerSelections.flatMap((selection, index) => (
       selection.playerIndex === playerIndex
         ? [{ row: selection.row, col: selection.col, order: index + 1 }]
         : []
     ));
+    return nextSelectedPowerCards.length > 0 ? nextSelectedPowerCards : EMPTY_ORDERED_GRID_SELECTIONS;
   }, [powerSelections]);
 
   const buildPowerConfirmCards = useCallback((playerId: string): GridSelection[] => {
-    return powerConfirmCards
+    if (powerConfirmCards.length === 0) return EMPTY_GRID_SELECTIONS;
+
+    const nextPowerConfirmCards = powerConfirmCards
       .filter(selection => selection.playerId === playerId)
       .map(selection => ({ row: selection.row, col: selection.col }));
+    return nextPowerConfirmCards.length > 0 ? nextPowerConfirmCards : EMPTY_GRID_SELECTIONS;
   }, [powerConfirmCards]);
 
   const buildSelectablePowerCards = useCallback((playerIndex: number): GridSelection[] => {
-    if (phase !== 'power' || !pendingPower || !isMyTurn) return [];
+    if (phase !== 'power' || !pendingPower || !isMyTurn) return EMPTY_GRID_SELECTIONS;
     const player = players[playerIndex];
-    if (!player) return [];
+    if (!player) return EMPTY_GRID_SELECTIONS;
 
     const firstSelection = powerSelections[0] ?? null;
     const selectionsFull = powerSelections.length >= 2;
     const singlePeekLocked = (pendingPower === '7' || pendingPower === '8') && peekedCards.length > 0;
 
-    return player.cards.flatMap((row, ri) => row.flatMap((card, ci) => {
+    const nextSelectablePowerCards = player.cards.flatMap((row, ri) => row.flatMap((card, ci) => {
       if (!card) return [];
       const alreadySelected = powerSelections.some(selection =>
         selection.playerIndex === playerIndex && selection.row === ri && selection.col === ci
@@ -1525,6 +1611,7 @@ export default function Game() {
       );
       return canSelect ? [{ row: ri, col: ci }] : [];
     }));
+    return nextSelectablePowerCards.length > 0 ? nextSelectablePowerCards : EMPTY_GRID_SELECTIONS;
   }, [phase, pendingPower, players, powerSelections, isMyTurn, peekedCards]);
 
   const commitPower9Choice = useCallback((doSwap: boolean) => {
@@ -1597,8 +1684,64 @@ export default function Game() {
     usePower10,
       isSamePowerSelection,
   ]);
+  const handlePowerCardClickRef = useRef(handlePowerCardClick);
+  handlePowerCardClickRef.current = handlePowerCardClick;
+
+  const handlePowerClickP1 = useCallback((row: number, col: number) => {
+    handlePowerCardClickRef.current(0, row, col);
+  }, []);
+
+  const handlePowerClickP2 = useCallback((row: number, col: number) => {
+    handlePowerCardClickRef.current(1, row, col);
+  }, []);
+
+  const handlePowerClickP3 = useCallback((row: number, col: number) => {
+    handlePowerCardClickRef.current(2, row, col);
+  }, []);
+
+  const handlePowerClickP4 = useCallback((row: number, col: number) => {
+    handlePowerCardClickRef.current(3, row, col);
+  }, []);
+
+  const handleDrawFromPile = useCallback(() => {
+    if (isPerfDebugEnabled()) {
+      drawPerfStartRef.current = performance.now();
+      debugPerf('drawFromPile click', {
+        phase,
+        drawPile: drawPile.length,
+        isMyTurn,
+      });
+    }
+    drawFromPile();
+  }, [drawFromPile, drawPile.length, isMyTurn, phase]);
+
+  useEffect(() => {
+    if (!isPerfDebugEnabled() || drawPerfStartRef.current === null) return;
+    if (phase === 'draw' && drawnCard === null) return;
+
+    const elapsed = performance.now() - drawPerfStartRef.current;
+    debugPerf('drawFromPile resolved', {
+      phase,
+      drawnCard: drawnCard?.id ?? null,
+      drawPile: drawPile.length,
+      elapsedMs: Number(elapsed.toFixed(2)),
+    });
+    drawPerfStartRef.current = null;
+  }, [drawPile.length, drawnCard, phase]);
 
   if (players.length === 0) return null;
+
+  debugPerf('Game render', {
+    phase,
+    currentPlayerIndex,
+    isMyTurn,
+    drawPile: drawPile.length,
+    discardPile: discardPile.length,
+    drawnCard: drawnCard?.id ?? null,
+    pendingPower,
+    swapMode,
+    matchWindowActive,
+  });
 
   const localPowerViewerReady = Boolean(myPlayerId) && players[0]?.id === myPlayerId;
   const powerModeActive =
@@ -1688,16 +1831,17 @@ export default function Game() {
     : `${players[currentPlayerIndex]?.name}'S TURN`;
 
   return (
-    <div
-      ref={gameRootRef}
-      className="min-h-screen w-full overflow-hidden font-game relative"
-      style={{
-        background: 'radial-gradient(ellipse at 50% 40%, #1565C0 0%, #0D47A1 25%, #0D2137 65%, #060D1B 100%)',
-        fontFamily: 'Nunito, sans-serif',
-        display: 'flex', flexDirection: 'column',
-      }}
-    >
-      <LayoutGroup id="game-table">
+    <DebugProfiler id="GameScreen">
+      <div
+        ref={gameRootRef}
+        className="min-h-screen w-full overflow-hidden font-game relative"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 40%, #1565C0 0%, #0D47A1 25%, #0D2137 65%, #060D1B 100%)',
+          fontFamily: 'Nunito, sans-serif',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
+        <LayoutGroup id="game-table">
       {/* Subtle grid pattern */}
       <div style={{
         position: 'absolute', inset: 0,
@@ -1953,12 +2097,12 @@ export default function Game() {
         {/* Top player (P3) */}
         <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
           {p3 && (
-            <PlayerPanelComp
+            <MemoPlayerPanelComp
               player={p3}
               isActive={currentPlayerIndex === 2}
               isYou={false}
               position="top"
-              selectedForSwap={swapMode}
+              selectedForSwap={false}
               aiThinking={aiThinking}
               score={countCardsInHand(p3)}
               revealCards={buildRevealCards(2)}
@@ -1969,7 +2113,7 @@ export default function Game() {
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(2)}
-              onPowerClick={(row, col) => handlePowerCardClick(2, row, col)}
+              onPowerClick={handlePowerClickP3}
               reactionSelectable={reactionMode}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p3.id ? submittedReactionCard : null}
@@ -1981,12 +2125,12 @@ export default function Game() {
         {/* Left player (P2) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
           {p2 && (
-            <PlayerPanelComp
+            <MemoPlayerPanelComp
               player={p2}
               isActive={currentPlayerIndex === 1}
               isYou={false}
               position="left"
-              selectedForSwap={swapMode}
+              selectedForSwap={false}
               aiThinking={aiThinking}
               score={countCardsInHand(p2)}
               revealCards={buildRevealCards(1)}
@@ -1997,7 +2141,7 @@ export default function Game() {
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(1)}
-              onPowerClick={(row, col) => handlePowerCardClick(1, row, col)}
+              onPowerClick={handlePowerClickP2}
               reactionSelectable={reactionMode}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
@@ -2011,26 +2155,28 @@ export default function Game() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '8px 24px',
         }}>
-          <PileArea
-            drawPile={drawPile}
-            discardPile={discardPile}
-            drawnCard={drawnCard}
-            phase={phase}
-            isMyTurn={isMyTurn}
-            onDraw={drawFromPile}
-            onTakeDiscard={takeFromDiscard}
-          />
+          <DebugProfiler id="PileArea">
+            <PileArea
+              drawPile={drawPile}
+              discardPile={discardPile}
+              drawnCard={drawnCard}
+              phase={phase}
+              isMyTurn={isMyTurn}
+              onDraw={handleDrawFromPile}
+              onTakeDiscard={takeFromDiscard}
+            />
+          </DebugProfiler>
         </div>
 
         {/* Right player (P4) */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           {p4 && (
-            <PlayerPanelComp
+            <MemoPlayerPanelComp
               player={p4}
               isActive={currentPlayerIndex === 3}
               isYou={false}
               position="right"
-              selectedForSwap={swapMode}
+              selectedForSwap={false}
               aiThinking={aiThinking}
               score={countCardsInHand(p4)}
               revealCards={buildRevealCards(3)}
@@ -2041,7 +2187,7 @@ export default function Game() {
               powerModeActive={powerInteractionActive}
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(3)}
-              onPowerClick={(row, col) => handlePowerCardClick(3, row, col)}
+              onPowerClick={handlePowerClickP4}
               reactionSelectable={reactionMode}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p4.id ? submittedReactionCard : null}
@@ -2152,26 +2298,28 @@ export default function Game() {
               )}
             </div>
 
-            <PlayerCardGrid
-              player={p1}
-              isActive={isMyTurn}
-              isYou={true}
-              onCardClick={handleCardClick}
-              selectedForSwap={swapMode}
-              revealCards={buildRevealCards(0)}
-              powerSelectableCards={buildSelectablePowerCards(0)}
-              powerSelectedCards={buildSelectedPowerCards(0)}
-              powerConfirmCards={buildPowerConfirmCards(p1.id)}
-              powerSwapGlowCardIds={powerSwapGlowCardIds}
-              powerModeActive={powerInteractionActive}
-              powerTone={powerTone}
-              onPowerClick={(row, col) => handlePowerCardClick(0, row, col)}
-              reactionSelectable={reactionMode}
-              onReactionClick={handleReactionCardClick}
-              reactionSelected={submittedReactionCard}
-              peekPhase={peekActive}
-              registerCardNode={registerCardNode}
-            />
+            <DebugProfiler id="BottomPlayerGrid">
+              <PlayerCardGrid
+                player={p1}
+                isActive={isMyTurn}
+                isYou={true}
+                onCardClick={handleCardClick}
+                selectedForSwap={swapMode}
+                revealCards={buildRevealCards(0)}
+                powerSelectableCards={buildSelectablePowerCards(0)}
+                powerSelectedCards={buildSelectedPowerCards(0)}
+                powerConfirmCards={buildPowerConfirmCards(p1.id)}
+                powerSwapGlowCardIds={powerSwapGlowCardIds}
+                powerModeActive={powerInteractionActive}
+                powerTone={powerTone}
+                onPowerClick={handlePowerClickP1}
+                reactionSelectable={reactionMode}
+                onReactionClick={handleReactionCardClick}
+                reactionSelected={submittedReactionCard}
+                peekPhase={peekActive}
+                registerCardNode={registerCardNode}
+              />
+            </DebugProfiler>
           </div>
 
           {/* Action buttons */}
@@ -2280,7 +2428,8 @@ export default function Game() {
           </div>
         </div>
       </div>
-      </LayoutGroup>
-    </div>
+        </LayoutGroup>
+      </div>
+    </DebugProfiler>
   );
 }
