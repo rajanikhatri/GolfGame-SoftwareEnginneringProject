@@ -1,4 +1,4 @@
-import { Profiler, memo, type ReactNode, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { Profiler, memo, type ReactNode, type CSSProperties, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
@@ -734,7 +734,7 @@ function PlayerCardGrid({
                       zIndex: 1,
                       background: 'radial-gradient(circle, rgba(239,83,80,0.22) 0%, rgba(239,83,80,0.12) 42%, transparent 72%)',
                       boxShadow: 'inset 0 0 0 2px rgba(255,138,128,0.78), 0 0 18px rgba(239,83,80,0.42), 0 0 34px rgba(183,28,28,0.24)',
-                      animation: 'power-swap-red-glow 5s ease-out forwards',
+                      animation: 'power-swap-red-glow 7s ease-out forwards',
                     }}
                   />
                 )}
@@ -898,7 +898,7 @@ function PlayerCardGrid({
 // ─── Player Panel ─────────────────────────────────────────────────────────────
 function PlayerPanelComp({
   player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking, score,
-  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue, registerCardNode,
+  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue, registerCardNode, cardAreaGlowStyle,
 }: {
   player: Player;
   isActive: boolean;
@@ -922,6 +922,7 @@ function PlayerPanelComp({
   reactionSelected?: { playerId: string; row: number; col: number } | null;
   discardLandingCue?: boolean;
   registerCardNode?: RegisterCardNode;
+  cardAreaGlowStyle?: CSSProperties;
 }) {
   const isHorizontal = position === 'top' || position === 'bottom';
   const hasPowerTargets = Boolean(powerSelectableCards && powerSelectableCards.length > 0);
@@ -1021,6 +1022,7 @@ function PlayerPanelComp({
           ? `linear-gradient(135deg, ${powerAccent.softFill}, rgba(255,255,255,0.04))`
           : undefined,
         transform: hasPowerTargets ? 'translateY(-2px)' : undefined,
+        ...cardAreaGlowStyle,
       }}>
         <AnimatePresence>
           {discardLandingCue && <DiscardLandingCue />}
@@ -1292,6 +1294,7 @@ export default function Game() {
   const [powerConfirmCards, setPowerConfirmCards] = useState<SwapCueSelection[]>([]);
   const [powerSwapGlowCardIds, setPowerSwapGlowCardIds] = useState<string[]>([]);
   const [selectedPowerCueAnchor, setSelectedPowerCueAnchor] = useState<CardAnchor | null>(null);
+  const [opponentSwapCueAnchor, setOpponentSwapCueAnchor] = useState<CardAnchor | null>(null);
   const [powerSwapAnimation, setPowerSwapAnimation] = useState<PowerSwapAnimation | null>(null);
   const [powerCompletionLabel, setPowerCompletionLabel] = useState<string | null>(null);
   const [submittedReactionCard, setSubmittedReactionCard] = useState<{
@@ -1432,7 +1435,7 @@ export default function Game() {
     currentPlayerIndex === 0 &&
     players[0]?.id === myPlayerId &&
     (pendingPower === '9' || pendingPower === '10') &&
-    powerSelections.length === 1 &&
+    powerSelections.length < 2 &&
     !powerSwapAnimation;
 
   useEffect(() => {
@@ -1448,8 +1451,10 @@ export default function Game() {
   }, [powerSwapAnimation]);
 
   useLayoutEffect(() => {
+    // Pick-1 state (length 0): show cue at local player's first card as a "tap here" hint.
+    // Pick-2 state (length 1): show cue at the already-selected card.
     const selectedSwapCard = selectedSwapCueActive
-      ? powerSelections[0]
+      ? (powerSelections[0] ?? (players[0] ? { playerId: players[0].id, row: 0, col: 0 } : null))
       : null;
 
     if (!selectedSwapCard) {
@@ -1478,7 +1483,36 @@ export default function Game() {
     selectedSwapCueActive,
     powerSelections,
     measureCardAnchor,
+    players,
   ]);
+
+  // True on any non-acting screen while power 9/10 is choosing targets
+  const opponentSwapCueActive =
+    phase === 'power' &&
+    !isMyTurn &&
+    (pendingPower === '9' || pendingPower === '10') &&
+    !powerSwapAnimation;
+
+  useLayoutEffect(() => {
+    if (!opponentSwapCueActive) {
+      setOpponentSwapCueAnchor(null);
+      return;
+    }
+    const actingPlayer = players[currentPlayerIndex];
+    if (!actingPlayer) {
+      setOpponentSwapCueAnchor(null);
+      return;
+    }
+    const updateAnchor = () => {
+      setOpponentSwapCueAnchor(measureCardAnchor(actingPlayer.id, 0, 0));
+    };
+    const frame = window.requestAnimationFrame(updateAnchor);
+    window.addEventListener('resize', updateAnchor);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateAnchor);
+    };
+  }, [opponentSwapCueActive, players, currentPlayerIndex, measureCardAnchor]);
 
   useEffect(() => {
     const previousPlayers = prevPlayersRef.current;
@@ -1590,14 +1624,14 @@ export default function Game() {
           });
           powerSwapAnimationTimerRef.current = setTimeout(() => {
             setPowerSwapAnimation(null);
-          }, 1050);
+          }, 1600);
         } else {
           setPowerSwapAnimation(null);
         }
         setPowerSwapGlowCardIds(uniqueChangedCardIds);
         powerSwapGlowTimerRef.current = setTimeout(() => {
           setPowerSwapGlowCardIds([]);
-        }, 5000);
+        }, 7000);
         setPowerCompletionLabel(previousPendingPower === '9' ? 'Peek swap complete' : 'Blind swap complete');
         powerCompletionTimerRef.current = setTimeout(() => {
           setPowerCompletionLabel(null);
@@ -1624,12 +1658,12 @@ export default function Game() {
           setPowerSwapAnimation({ from: pileAnchor, to: handAnchor });
           powerSwapAnimationTimerRef.current = setTimeout(() => {
             setPowerSwapAnimation(null);
-          }, 1050);
+          }, 1600);
         }
         setPowerSwapGlowCardIds(uniqueChangedCardIds);
         powerSwapGlowTimerRef.current = setTimeout(() => {
           setPowerSwapGlowCardIds([]);
-        }, 3500);
+        }, 7000);
       } else {
         setPowerConfirmCards([]);
       }
@@ -1958,32 +1992,33 @@ export default function Game() {
   // (powerSelections) and are not broadcast until the action commits to Firestore.
   const powerFocusActive = phase === 'power' && Boolean(pendingPower);
 
-  const getPlayerFocusStyle = (playerIndex: number) => {
+  // Outer container: only dim non-focus players. Acting/target players stay fully opaque.
+  const getPlayerDimStyle = (playerIndex: number): CSSProperties => {
     if (!powerFocusActive) return {};
-    // Local player is the acting player → their screen stays completely normal.
-    // currentPlayerIndex === 0 means engineStateToPlayers placed the local player
-    // first, so the acting player (index 0 in the local view) IS the local user.
     if (currentPlayerIndex === 0) return {};
-    // Non-acting player's screen: spotlight the acting player, dim everyone else.
-    // If a target has been selected (powerFocusTargetId), give them a blue glow
-    // so the two roles — actor (gold) vs target (blue) — are visually distinct.
     const isActing = playerIndex === currentPlayerIndex;
     const isTarget = powerFocusTargetId !== null && players[playerIndex]?.id === powerFocusTargetId;
-    if (isActing) return {
-      borderRadius: 16,
-      boxShadow: '0 0 0 3px rgba(255, 200, 30, 0.84), 0 0 44px rgba(255, 180, 0, 0.55)',
-      transition: 'opacity 0.4s ease, filter 0.4s ease, box-shadow 0.4s ease',
-    };
-    if (isTarget) return {
-      borderRadius: 16,
-      boxShadow: '0 0 0 3px rgba(100, 200, 255, 0.84), 0 0 44px rgba(80, 160, 255, 0.5)',
-      transition: 'opacity 0.4s ease, filter 0.4s ease, box-shadow 0.4s ease',
-    };
+    if (isActing || isTarget) return { transition: 'opacity 0.4s ease, filter 0.4s ease' };
     return {
       opacity: 0.35,
       filter: 'brightness(0.55) saturate(0.4)',
       transition: 'opacity 0.4s ease, filter 0.4s ease',
     };
+  };
+
+  // Card area only: glow on actor (gold) or target (blue). No effect on dimmed players.
+  const getPlayerCardGlowStyle = (playerIndex: number): CSSProperties => {
+    if (!powerFocusActive) return {};
+    if (currentPlayerIndex === 0) return {};
+    const isActing = playerIndex === currentPlayerIndex;
+    const isTarget = powerFocusTargetId !== null && players[playerIndex]?.id === powerFocusTargetId;
+    if (isActing) return {
+      boxShadow: '0 0 0 3px rgba(255, 200, 30, 0.84), 0 0 44px rgba(255, 180, 0, 0.55)',
+    };
+    if (isTarget) return {
+      boxShadow: '0 0 0 3px rgba(100, 200, 255, 0.84), 0 0 44px rgba(80, 160, 255, 0.5)',
+    };
+    return {};
   };
   const swapPowerCueSize = 68;
   const statusLabel = pendingPower === '7'
@@ -2048,6 +2083,20 @@ export default function Game() {
             style={{
               left: selectedPowerCueAnchor.x - swapPowerCueSize / 2,
               top: selectedPowerCueAnchor.y - swapPowerCueSize / 2,
+              zIndex: 34,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Hand cue on non-acting screens: floats over the acting player's card area */}
+      <AnimatePresence>
+        {opponentSwapCueActive && opponentSwapCueAnchor && (
+          <HandCue
+            size={swapPowerCueSize}
+            style={{
+              left: opponentSwapCueAnchor.x - swapPowerCueSize / 2,
+              top: opponentSwapCueAnchor.y - swapPowerCueSize / 2,
               zIndex: 34,
             }}
           />
@@ -2285,7 +2334,7 @@ export default function Game() {
       }}>
 
         {/* Top player (P3) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', ...getPlayerFocusStyle(2) }}>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', ...getPlayerDimStyle(2) }}>
           {p3 && (
             <MemoPlayerPanelComp
               player={p3}
@@ -2308,12 +2357,13 @@ export default function Game() {
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p3.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
+              cardAreaGlowStyle={getPlayerCardGlowStyle(2)}
             />
           )}
         </div>
 
         {/* Left player (P2) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', ...getPlayerFocusStyle(1) }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', ...getPlayerDimStyle(1) }}>
           {p2 && (
             <MemoPlayerPanelComp
               player={p2}
@@ -2336,6 +2386,7 @@ export default function Game() {
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
+              cardAreaGlowStyle={getPlayerCardGlowStyle(1)}
             />
           )}
         </div>
@@ -2359,7 +2410,7 @@ export default function Game() {
         </div>
 
         {/* Right player (P4) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...getPlayerFocusStyle(3) }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...getPlayerDimStyle(3) }}>
           {p4 && (
             <MemoPlayerPanelComp
               player={p4}
@@ -2382,12 +2433,13 @@ export default function Game() {
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p4.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
+              cardAreaGlowStyle={getPlayerCardGlowStyle(3)}
             />
           )}
         </div>
 
         {/* Bottom player (P1 - YOU) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerFocusStyle(0) }}>
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerDimStyle(0) }}>
           {/* Player hand */}
           <div style={{
             position: 'relative',
@@ -2399,6 +2451,7 @@ export default function Game() {
             boxShadow: isMyTurn ? `0 0 30px ${p1.color}30` : 'none',
             transition: 'all 0.3s ease',
             animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
+            ...getPlayerCardGlowStyle(0),
           }}>
             <AnimatePresence>
               {discardLandingPlayerIds.includes(p1.id) && <DiscardLandingCue />}

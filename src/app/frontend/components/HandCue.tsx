@@ -140,7 +140,7 @@ export function SwapExchangeCue({
       <motion.div
         initial={{ opacity: 0, scaleX: 0.86 }}
         animate={{ opacity: [0, 0.42, 0.18], scaleX: [0.86, 1, 1] }}
-        transition={{ duration: 0.92, ease: 'easeOut' }}
+        transition={{ duration: 1.25, ease: 'easeOut' }}
         style={{
           position: 'absolute',
           left: midX - distance / 2,
@@ -160,7 +160,7 @@ export function SwapExchangeCue({
           key={`${point.x}-${point.y}-${index}`}
           initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: [0, 0.95, 0.1], scale: [0.7, 1.18, 1.34] }}
-          transition={{ duration: 0.88, ease: 'easeOut', delay: index * 0.06 }}
+          transition={{ duration: 1.15, ease: 'easeOut', delay: index * 0.06 }}
           style={{
             position: 'absolute',
             left: point.x - 15,
@@ -178,7 +178,7 @@ export function SwapExchangeCue({
       <motion.div
         initial={{ opacity: 0, scale: 0.84, rotate: -24 }}
         animate={{ opacity: [0, 1, 0.18], scale: [0.84, 1.06, 1], rotate: [ -24, 0, 10 ] }}
-        transition={{ duration: 0.96, ease: 'easeOut' }}
+        transition={{ duration: 1.3, ease: 'easeOut' }}
         style={{
           position: 'absolute',
           left: midX - 26,
@@ -212,7 +212,7 @@ export function SwapExchangeCue({
           rotate: [-10, 12, 4],
           scale: [0.92, 1.06, 1],
         }}
-        transition={{ duration: 0.96, ease: 'easeInOut', times: [0, 0.18, 1] }}
+        transition={{ duration: 1.3, ease: 'easeInOut', times: [0, 0.18, 1] }}
         style={ghostCardStyle}
       >
         <div
@@ -241,7 +241,7 @@ export function SwapExchangeCue({
           rotate: [10, -12, -4],
           scale: [0.92, 1.06, 1],
         }}
-        transition={{ duration: 0.96, ease: 'easeInOut', times: [0, 0.18, 1] }}
+        transition={{ duration: 1.3, ease: 'easeInOut', times: [0, 0.18, 1] }}
         style={{
           ...ghostCardStyle,
           background: 'linear-gradient(145deg, rgba(255,250,250,0.96) 0%, rgba(255,224,178,0.92) 100%)',
