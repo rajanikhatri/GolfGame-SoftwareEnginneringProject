@@ -68,11 +68,11 @@ export function GameCard({
     width: rotated ? dims.height : dims.width,
     height: rotated ? dims.width : dims.height,
     borderRadius: dims.borderRadius,
-    border: selected ? '3px solid #FFC107' : '3px solid white',
+    border: selected ? '3px solid #FFD600' : '3px solid white',
     boxShadow: selected
-      ? '0 0 0 3px #FFC107, 0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(255,193,7,0.6)'
+      ? '0 0 0 4px #FFD600, 0 0 0 10px rgba(255,214,0,0.28), 0 8px 28px rgba(0,0,0,0.55), 0 0 36px rgba(255,193,7,0.82)'
       : glowing
-      ? '0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(30,136,229,0.8)'
+      ? '0 8px 24px rgba(0,0,0,0.5), 0 0 24px rgba(30,136,229,0.85)'
       : '0 6px 20px rgba(0,0,0,0.45)',
     cursor: selectable || onClick ? 'pointer' : 'default',
     transition: 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',

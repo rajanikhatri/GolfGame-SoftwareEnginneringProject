@@ -713,18 +713,18 @@ function PlayerCardGrid({
                 animate={isPowerConfirm
                   ? {
                       opacity: shouldDimForPower ? 0.36 : 1,
-                      y: [0, -8, -2, 0],
-                      scale: [1, 1.08, 1.03, 1],
+                      y: [0, -14, -4, 0],
+                      scale: [1, 1.18, 1.10, 1],
                     }
                   : {
                       opacity: shouldDimForPower ? 0.36 : 1,
-                      y: isPowerSelected ? -6 : isPowerTarget ? -4 : 0,
-                      scale: isPowerSelected ? 1.05 : isPowerTarget ? 1.025 : 1,
+                      y: isPowerSelected ? -8 : isPowerTarget ? -5 : isPeeked ? -8 : isReactionSelected ? -6 : 0,
+                      scale: isPowerSelected ? 1.14 : isPowerTarget ? 1.07 : isPeeked ? 1.14 : isReactionSelected ? 1.12 : 1,
                     }}
-                whileTap={isInteractive ? { scale: 0.92 } : undefined}
+                whileTap={isInteractive ? { scale: 0.90 } : undefined}
                 transition={isPowerConfirm
-                  ? { duration: 0.72, times: [0, 0.42, 0.72, 1], ease: 'easeOut' }
-                  : { type: 'spring', stiffness: 340, damping: 18, opacity: { duration: 0.18 } }}
+                  ? { duration: 0.85, times: [0, 0.35, 0.68, 1], ease: 'easeOut' }
+                  : { type: 'spring', stiffness: 420, damping: 16, opacity: { duration: 0.18 } }}
                 style={{
                   position: 'relative',
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,
@@ -775,26 +775,23 @@ function PlayerCardGrid({
                   style={
                     isPowerSelected && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 26px ${powerAccent.glow}`,
-                          transform: 'translateY(-2px) scale(1.04)',
+                          boxShadow: `0 0 0 4px ${powerAccent.outline}, 0 0 32px ${powerAccent.glow}`,
                         }
                       : isPowerTarget && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 24px ${powerAccent.glow}`,
-                          transform: 'translateY(-1px) scale(1.02)',
+                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 28px ${powerAccent.glow}`,
                           animation: 'pulse-glow 1s ease-in-out infinite',
                         }
                       : isPowerConfirm && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 28px ${powerAccent.glow}`,
-                          transform: 'scale(1.03)',
+                          boxShadow: `0 0 0 4px ${powerAccent.outline}, 0 0 36px ${powerAccent.glow}`,
                         }
                       : isReactionSelected
-                      ? { boxShadow: '0 0 0 3px #66BB6A, 0 0 24px rgba(102,187,106,0.95)', transform: 'scale(1.04)' }
+                      ? { boxShadow: '0 0 0 4px #66BB6A, 0 0 32px rgba(102,187,106,0.95)' }
                       : isReactionTarget
-                      ? { boxShadow: '0 0 0 3px #FFB300, 0 0 22px rgba(255,179,0,0.85)', animation: 'pulse-glow 0.8s infinite' }
+                      ? { boxShadow: '0 0 0 3px #FFB300, 0 0 26px rgba(255,179,0,0.85)', animation: 'pulse-glow 0.8s infinite' }
                       : isPeeked
-                      ? { boxShadow: '0 0 0 3px #42A5F5, 0 0 24px rgba(66,165,245,0.9)', transform: 'scale(1.06)' }
+                      ? { boxShadow: '0 0 0 4px #42A5F5, 0 0 32px rgba(66,165,245,0.9)' }
                       : undefined
                   }
                 />
