@@ -1263,6 +1263,7 @@ export default function Game() {
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, reactToDiscard, knock,
     initGame, pendingPower, resolvePower, skipPower, disconnectedPlayerName, swapCountdown, endPeek,
     selectPower9Card, confirmPower9, usePower10, giveawayGiverId,
+    powerFocusTargetId, setFocusTarget,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -1758,6 +1759,12 @@ export default function Game() {
       if (pendingPower === '8' && (playerIndex === 0 || targetCard.faceUp)) return;
       if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
 
+      // Power 8: write the target to Firestore immediately so opponent screens
+      // can show the blue target glow during the 3-second peek window.
+      if (pendingPower === '8') {
+        setFocusTarget(targetPlayerId);
+      }
+
       setPeekedCards([{ playerIndex, row, col }]);
       peekTimerRef.current = setTimeout(() => {
         resolvePower(targetPlayerId, flatIndex);
@@ -1772,6 +1779,12 @@ export default function Game() {
       selectPower9Card(targetPlayerId, flatIndex);
       setPowerSelections(prev => [...prev, selection]);
       setPeekedCards(prev => [...prev, { playerIndex, row, col }]);
+      // Highlight the opponent whenever an opponent card is tapped.
+      // Selecting your own card first leaves the target null until the
+      // opponent card is picked — single-target version is intentional.
+      if (targetPlayerId !== players[0]?.id) {
+        setFocusTarget(targetPlayerId);
+      }
       return;
     }
 
@@ -1783,6 +1796,11 @@ export default function Game() {
 
       const nextSelections = [...powerSelections, selection];
       setPowerSelections(nextSelections);
+
+      // Write the opponent's ID as focus target as soon as their card is tapped.
+      if (targetPlayerId !== players[0]?.id) {
+        setFocusTarget(targetPlayerId);
+      }
 
       if (nextSelections.length === 2) {
         setSelectedPowerCueAnchor(null);
@@ -1802,7 +1820,8 @@ export default function Game() {
     resolvePower,
     selectPower9Card,
     usePower10,
-      isSamePowerSelection,
+    isSamePowerSelection,
+    setFocusTarget,
   ]);
   const handlePowerCardClickRef = useRef(handlePowerCardClick);
   handlePowerCardClickRef.current = handlePowerCardClick;
@@ -1946,10 +1965,18 @@ export default function Game() {
     // first, so the acting player (index 0 in the local view) IS the local user.
     if (currentPlayerIndex === 0) return {};
     // Non-acting player's screen: spotlight the acting player, dim everyone else.
+    // If a target has been selected (powerFocusTargetId), give them a blue glow
+    // so the two roles — actor (gold) vs target (blue) — are visually distinct.
     const isActing = playerIndex === currentPlayerIndex;
+    const isTarget = powerFocusTargetId !== null && players[playerIndex]?.id === powerFocusTargetId;
     if (isActing) return {
       borderRadius: 16,
       boxShadow: '0 0 0 3px rgba(255, 200, 30, 0.84), 0 0 44px rgba(255, 180, 0, 0.55)',
+      transition: 'opacity 0.4s ease, filter 0.4s ease, box-shadow 0.4s ease',
+    };
+    if (isTarget) return {
+      borderRadius: 16,
+      boxShadow: '0 0 0 3px rgba(100, 200, 255, 0.84), 0 0 44px rgba(80, 160, 255, 0.5)',
       transition: 'opacity 0.4s ease, filter 0.4s ease, box-shadow 0.4s ease',
     };
     return {
