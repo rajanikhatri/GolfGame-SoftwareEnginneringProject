@@ -57,6 +57,9 @@ export interface GameState {
   // UI-only: the opponent whose panel should glow on non-acting players' screens
   // while power 8/9/10 is in progress. Set by the acting player, read by everyone.
   powerFocusTargetId?: string | null;
+  // UI-only: the specific card being peeked during power 7 (own card) or power 8
+  // (opponent card). Set when the acting player taps the card, cleared on resolve.
+  peekRevealCard?: { playerId: string; cardIndex: number } | null;
 
   pendingGiveaway: {
     giverId: string;
@@ -137,6 +140,7 @@ export function createInitialGameState(playerIds: string[]): GameState {
     scores: {},
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
     pendingGiveaway: null,
   };
 }
@@ -275,6 +279,7 @@ function drawOnePenaltyCard(
       scores: {},
       power9Selection: null,
       powerFocusTargetId: null,
+      peekRevealCard: null,
       pendingGiveaway: null,
     } as GameState);
 
@@ -315,6 +320,7 @@ export function advanceTurn(state: GameState): GameState {
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
     pendingGiveaway: null,
   };
 }
@@ -419,7 +425,7 @@ export function takeFromDiscard(state: GameState, playerId: string): GameState {
 export function skipPower(state: GameState, playerId: string): GameState {
   if (state.phase !== 'power') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null };
+  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null, peekRevealCard: null };
 }
 
 function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
@@ -439,6 +445,7 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
   };
 }
 
@@ -813,6 +820,7 @@ export function knock(state: GameState, playerId: string): GameState {
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
   };
 
   // Knocking uses up the current player's turn immediately.

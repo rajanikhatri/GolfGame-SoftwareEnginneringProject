@@ -196,3 +196,12 @@ export async function syncSetPowerFocusTarget(
 ): Promise<void> {
   await applyAction(roomCode, state => ({ ...state, powerFocusTargetId: targetPlayerId }));
 }
+
+// Sets or clears which specific card is being peeked (power 7 = own card,
+// power 8 = opponent card) so all connected clients can show the reveal.
+export async function syncSetPeekRevealCard(
+  roomCode: string,
+  card: { playerId: string; cardIndex: number } | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, peekRevealCard: card }));
+}
