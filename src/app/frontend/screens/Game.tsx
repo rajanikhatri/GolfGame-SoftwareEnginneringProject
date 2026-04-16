@@ -721,9 +721,10 @@ function PlayerCardGrid({
                       y: isPowerSelected ? -6 : isPowerTarget ? -4 : 0,
                       scale: isPowerSelected ? 1.05 : isPowerTarget ? 1.025 : 1,
                     }}
+                whileTap={isInteractive ? { scale: 0.92 } : undefined}
                 transition={isPowerConfirm
                   ? { duration: 0.72, times: [0, 0.42, 0.72, 1], ease: 'easeOut' }
-                  : { type: 'spring', stiffness: 280, damping: 24, opacity: { duration: 0.18 } }}
+                  : { type: 'spring', stiffness: 340, damping: 18, opacity: { duration: 0.18 } }}
                 style={{
                   position: 'relative',
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,

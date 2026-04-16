@@ -75,7 +75,7 @@ export function GameCard({
       ? '0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(30,136,229,0.8)'
       : '0 6px 20px rgba(0,0,0,0.45)',
     cursor: selectable || onClick ? 'pointer' : 'default',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    transition: 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',
     position: 'relative',
     overflow: 'hidden',
     flexShrink: 0,
