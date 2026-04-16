@@ -1060,7 +1060,7 @@ const MemoPlayerPanelComp = memo(PlayerPanelComp);
 
 // ─── Draw / Discard Piles ─────────────────────────────────────────────────────
 function PileArea({
-  drawPile, discardPile, drawnCard, phase, isMyTurn,
+  drawPile, discardPile, drawnCard, phase, isMyTurn, showSoloChangeCue,
   onDraw, onTakeDiscard,
 }: {
   drawPile: Card[];
@@ -1068,6 +1068,7 @@ function PileArea({
   drawnCard: Card | null;
   phase: string;
   isMyTurn: boolean;
+  showSoloChangeCue: boolean;
   onDraw: () => void;
   onTakeDiscard: () => void;
 }) {
@@ -1233,6 +1234,18 @@ function PileArea({
               )}
             </div>
             <div style={{ position: 'relative' }}>
+              {showSoloChangeCue && isMyTurn && (
+                <HandCue
+                  size={64}
+                  style={{
+                    left: '50%',
+                    top: '50%',
+                    marginLeft: -32,
+                    marginTop: -32,
+                    zIndex: 12,
+                  }}
+                />
+              )}
               <GameCard card={drawnCard} size="md" glowing />
             </div>
           </motion.div>
@@ -1257,6 +1270,7 @@ export default function Game() {
   const cardNodeMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const drawPerfStartRef = useRef<number | null>(null);
   const {
+    gameMode,
     myPlayerId,
     players, drawPile, discardPile, currentPlayerIndex,
     isMyTurn, giveAwayCardAction,
@@ -1540,12 +1554,12 @@ export default function Game() {
       }
     }
 
-    if (
-      previousPlayers.length > 0 &&
-      players.length > 0 &&
+    const shouldShowBroadSoloCue = gameMode === 'solo';
+    const shouldShowLegacyCue =
       phase === 'match_window' &&
-      (previousPhase === 'swap' || previousPhase === 'power')
-    ) {
+      (previousPhase === 'swap' || previousPhase === 'power');
+
+    if (previousPlayers.length > 0 && players.length > 0 && (shouldShowBroadSoloCue || shouldShowLegacyCue)) {
       const changedSlots = players.flatMap(player => {
         const previousPlayer = previousPlayers.find(prev => prev.id === player.id);
         if (!previousPlayer) return [];
@@ -1556,7 +1570,12 @@ export default function Game() {
           for (let col = 0; col < 2; col++) {
             const previousCard = previousPlayer.cards[row]?.[col] ?? null;
             const currentCard = player.cards[row]?.[col] ?? null;
-            if (previousCard?.id !== currentCard?.id && currentCard) {
+            const cardIdentityChanged = previousCard?.id !== currentCard?.id;
+            const cardRevealChanged =
+              previousCard?.id === currentCard?.id &&
+              previousCard?.faceUp !== currentCard?.faceUp;
+
+            if ((cardIdentityChanged || cardRevealChanged) && currentCard) {
               selections.push({ playerId: player.id, row, col });
             }
           }
@@ -1667,13 +1686,15 @@ export default function Game() {
       } else {
         setPowerConfirmCards([]);
       }
+    } else if (gameMode === 'solo') {
+      setSwapCueCards([]);
     }
 
     prevPlayersRef.current = players;
     prevMatchWindowRef.current = matchWindowActive;
     prevPhaseRef.current = phase;
     prevPendingPowerRef.current = pendingPower;
-  }, [players, matchWindowActive, phase, pendingPower, measureCardAnchor]);
+  }, [players, matchWindowActive, phase, pendingPower, gameMode, measureCardAnchor]);
 
   useEffect(() => () => {
     if (discardLandingTimerRef.current) clearTimeout(discardLandingTimerRef.current);
@@ -2403,6 +2424,7 @@ export default function Game() {
               drawnCard={drawnCard}
               phase={phase}
               isMyTurn={isMyTurn}
+              showSoloChangeCue={gameMode === 'solo'}
               onDraw={handleDrawFromPile}
               onTakeDiscard={takeFromDiscard}
             />

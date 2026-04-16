@@ -4,7 +4,6 @@ import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
-import { usePlayerAuth } from '../../auth/AuthContext';
 import {
   createRoomWithRetries,
   getWaitingRooms,
@@ -111,7 +110,6 @@ function DarkBtn({ onClick, children, style }: { onClick: () => void; children: 
 export default function ModeSelection() {
   const navigate = useNavigate();
   const { setGameMode, setPlayerName, setRoomCode } = useGame();
-  const { profile } = usePlayerAuth();
 
   // Modal state
   const [step, setStep] = useState<ModalStep>(null);
@@ -409,10 +407,119 @@ export default function ModeSelection() {
         </div>
 
         {/* Bottom info */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="flex items-center gap-6">
-          {[{ icon: <Trophy size={14} />, text: 'Leaderboards' }, { icon: <Zap size={14} />, text: 'Fast Rounds' }, { icon: <Star size={14} />, text: 'Rank Up' }].map(({ icon, text }) => (
-            <div key={text} className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontFamily: 'Nunito', fontWeight: 600 }}>{icon}<span>{text}</span></div>
-          ))}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          style={{
+            width: '100%',
+            maxWidth: 760,
+            background: 'linear-gradient(145deg, rgba(13,71,161,0.45), rgba(6,13,27,0.72))',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 22,
+            padding: '18px 22px',
+            boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 42,
+                height: 42,
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #FFD54F, #FF8F00)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 6px 20px rgba(255,193,7,0.35)',
+              }}>
+                <Trophy size={22} color="#3E2723" />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.18em', fontFamily: 'Nunito, sans-serif' }}>
+                  LEADERBOARD
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: 'white', fontFamily: 'Nunito, sans-serif' }}>
+                  Rankings
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {[{ icon: <Zap size={14} />, text: 'Wins Only' }, { icon: <Star size={14} />, text: 'Logged-In Players' }].map(({ icon, text }) => (
+                <div
+                  key={text}
+                  className="flex items-center gap-2"
+                  style={{
+                    color: 'rgba(255,255,255,0.6)',
+                    fontSize: 12,
+                    fontFamily: 'Nunito',
+                    fontWeight: 700,
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 999,
+                    padding: '6px 10px',
+                  }}
+                >
+                  {icon}
+                  <span>{text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate('/leaderboard')}
+            style={{
+              width: '100%',
+              marginTop: 16,
+              background: 'linear-gradient(135deg, rgba(255,193,7,0.18), rgba(255,143,0,0.08))',
+              border: '1px solid rgba(255,193,7,0.28)',
+              borderRadius: 18,
+              padding: '18px 20px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+            }}
+          >
+            <div>
+              <div style={{
+                fontSize: 18,
+                fontWeight: 900,
+                color: 'white',
+                fontFamily: 'Nunito, sans-serif',
+                marginBottom: 4,
+              }}>
+                View the full multiplayer leaderboard
+              </div>
+              <div style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'rgba(255,255,255,0.62)',
+                fontFamily: 'Nunito, sans-serif',
+                lineHeight: 1.5,
+              }}>
+                Open the standings page to see ranked wins, top players, and your current position.
+              </div>
+            </div>
+
+            <div style={{
+              flexShrink: 0,
+              background: 'linear-gradient(135deg, #FFD54F, #FF8F00)',
+              color: '#3E2723',
+              borderRadius: 999,
+              padding: '10px 16px',
+              fontSize: 12,
+              fontWeight: 900,
+              fontFamily: 'Nunito, sans-serif',
+              letterSpacing: '0.08em',
+            }}>
+              OPEN
+            </div>
+          </button>
         </motion.div>
       </div>
 
