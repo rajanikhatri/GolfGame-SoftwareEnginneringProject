@@ -22,6 +22,7 @@ import {
   syncGiveAwayCard,
   syncSetPowerFocusTarget,
   syncSetPeekRevealCard,
+  syncSetPowerCueCard,
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
@@ -149,9 +150,11 @@ interface GameContextType {
   power9Selection: { playerId: string; cardIndex: number }[] | null;
   powerFocusTargetId: string | null;
   peekRevealCard: { playerId: string; cardIndex: number } | null;
+  powerCueCard: { playerId: string; cardIndex: number } | null;
   giveawayGiverId: string | null;
   setFocusTarget: (targetPlayerId: string | null) => void;
   setPeekRevealCard: (card: { playerId: string; cardIndex: number } | null) => void;
+  setPowerCueCard: (card: { playerId: string; cardIndex: number } | null) => void;
   // Called from Lobby when game is about to start (multiplayer).
   // Host passes roomPlayerIds to create the deck in Firestore; joiners omit it.
   initMultiplayer: (
@@ -430,6 +433,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [power9Selection,       setPower9Selection]       = useState<{ playerId: string; cardIndex: number }[] | null>(null);
   const [powerFocusTargetId,    setPowerFocusTargetId]    = useState<string | null>(null);
   const [peekRevealCard,        setPeekRevealCardState]    = useState<{ playerId: string; cardIndex: number } | null>(null);
+  const [powerCueCard,          setPowerCueCardState]       = useState<{ playerId: string; cardIndex: number } | null>(null);
   const [giveawayGiverId,       setGiveawayGiverId]       = useState<string | null>(null);
   const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string | null>(null);
   const [swapCountdown,         setSwapCountdown]         = useState<number | null>(null);
@@ -629,6 +633,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
     setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
     setPeekRevealCardState((state.peekRevealCard as { playerId: string; cardIndex: number } | null) ?? null);
+    setPowerCueCardState((state.powerCueCard as { playerId: string; cardIndex: number } | null) ?? null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
 
@@ -1313,6 +1318,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [gameMode]);
 
+  const setPowerCueCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerCueCard(roomCodeRef.current, card).catch(console.error);
+    }
+  }, [gameMode]);
+
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
       if (selections.length < 2) return;
@@ -1427,9 +1438,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard,
-      pendingPower, power9Selection, powerFocusTargetId, peekRevealCard, giveawayGiverId,
+      pendingPower, power9Selection, powerFocusTargetId, peekRevealCard, powerCueCard, giveawayGiverId,
       setFocusTarget: setFocusTargetAction,
       setPeekRevealCard: setPeekRevealCardAction,
+      setPowerCueCard: setPowerCueCardAction,
       swapCountdown,
       disconnectedPlayerName,
       initMultiplayer,

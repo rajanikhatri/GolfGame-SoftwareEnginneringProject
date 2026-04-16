@@ -60,6 +60,9 @@ export interface GameState {
   // UI-only: the specific card being peeked during power 7 (own card) or power 8
   // (opponent card). Set when the acting player taps the card, cleared on resolve.
   peekRevealCard?: { playerId: string; cardIndex: number } | null;
+  // UI-only: the most-recently selected card during power 9/10 selection phase.
+  // Updated on every pick so all clients can anchor the hand cue to the correct card.
+  powerCueCard?: { playerId: string; cardIndex: number } | null;
 
   pendingGiveaway: {
     giverId: string;
@@ -141,6 +144,7 @@ export function createInitialGameState(playerIds: string[]): GameState {
     power9Selection: null,
     powerFocusTargetId: null,
     peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -280,6 +284,7 @@ function drawOnePenaltyCard(
       power9Selection: null,
       powerFocusTargetId: null,
       peekRevealCard: null,
+      powerCueCard: null,
       pendingGiveaway: null,
     } as GameState);
 
@@ -321,6 +326,7 @@ export function advanceTurn(state: GameState): GameState {
     power9Selection: null,
     powerFocusTargetId: null,
     peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -425,7 +431,7 @@ export function takeFromDiscard(state: GameState, playerId: string): GameState {
 export function skipPower(state: GameState, playerId: string): GameState {
   if (state.phase !== 'power') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null, peekRevealCard: null };
+  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null, peekRevealCard: null, powerCueCard: null };
 }
 
 function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
@@ -446,6 +452,7 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
     power9Selection: null,
     powerFocusTargetId: null,
     peekRevealCard: null,
+    powerCueCard: null,
   };
 }
 
@@ -821,6 +828,7 @@ export function knock(state: GameState, playerId: string): GameState {
     power9Selection: null,
     powerFocusTargetId: null,
     peekRevealCard: null,
+    powerCueCard: null,
   };
 
   // Knocking uses up the current player's turn immediately.

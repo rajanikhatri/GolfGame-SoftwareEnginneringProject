@@ -1302,6 +1302,7 @@ export default function Game() {
     selectPower9Card, confirmPower9, usePower10, giveawayGiverId,
     powerFocusTargetId, setFocusTarget,
     peekRevealCard, setPeekRevealCard,
+    powerCueCard, setPowerCueCard,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -1471,7 +1472,7 @@ export default function Game() {
     currentPlayerIndex === 0 &&
     players[0]?.id === myPlayerId &&
     (pendingPower === '9' || pendingPower === '10') &&
-    powerSelections.length === 1 &&
+    powerSelections.length >= 1 &&
     !powerSwapAnimation;
 
   useEffect(() => {
@@ -1487,8 +1488,8 @@ export default function Game() {
   }, [powerSwapAnimation]);
 
   useLayoutEffect(() => {
-    // Cue appears only after the first pick (length === 1), pointing at the selected card.
-    const selectedSwapCard = selectedSwapCueActive ? (powerSelections[0] ?? null) : null;
+    // Cue points at the most recently selected card (first or second pick).
+    const selectedSwapCard = selectedSwapCueActive ? (powerSelections[powerSelections.length - 1] ?? null) : null;
 
     if (!selectedSwapCard) {
       setSelectedPowerCueAnchor(null);
@@ -1518,27 +1519,24 @@ export default function Game() {
     measureCardAnchor,
   ]);
 
-  // True on non-acting screens only after the acting player has targeted an opponent
-  // (powerFocusTargetId set), matching the acting player's own post-first-pick cue.
+  // True on non-acting screens whenever the acting player has selected a card
+  // (powerCueCard set), so the cue is anchored to the exact selected card.
   const opponentSwapCueActive =
     phase === 'power' &&
     !isMyTurn &&
     (pendingPower === '9' || pendingPower === '10') &&
-    powerFocusTargetId !== null &&
+    powerCueCard !== null &&
     !powerSwapAnimation;
 
   useLayoutEffect(() => {
-    if (!opponentSwapCueActive) {
+    if (!opponentSwapCueActive || !powerCueCard) {
       setOpponentSwapCueAnchor(null);
       return;
     }
-    const actingPlayer = players[currentPlayerIndex];
-    if (!actingPlayer) {
-      setOpponentSwapCueAnchor(null);
-      return;
-    }
+    const row = Math.floor(powerCueCard.cardIndex / 2);
+    const col = powerCueCard.cardIndex % 2;
     const updateAnchor = () => {
-      setOpponentSwapCueAnchor(measureCardAnchor(actingPlayer.id, 0, 0));
+      setOpponentSwapCueAnchor(measureCardAnchor(powerCueCard.playerId, row, col));
     };
     const frame = window.requestAnimationFrame(updateAnchor);
     window.addEventListener('resize', updateAnchor);
@@ -1546,7 +1544,7 @@ export default function Game() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', updateAnchor);
     };
-  }, [opponentSwapCueActive, players, currentPlayerIndex, measureCardAnchor]);
+  }, [opponentSwapCueActive, powerCueCard, measureCardAnchor]);
 
   useEffect(() => {
     const previousPlayers = prevPlayersRef.current;
@@ -1822,11 +1820,12 @@ export default function Game() {
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
     setSelectedPowerCueAnchor(null);
+    setPowerCueCard(null);
     confirmPower9(doSwap, powerSelections.map(selection => ({
       playerId: selection.playerId,
       cardFlatIndex: selection.cardFlatIndex,
     })));
-  }, [confirmPower9, powerSelections]);
+  }, [confirmPower9, powerSelections, setPowerCueCard]);
 
   // Called when player taps a card during power phase
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
@@ -1865,9 +1864,8 @@ export default function Game() {
       selectPower9Card(targetPlayerId, flatIndex);
       setPowerSelections(prev => [...prev, selection]);
       setPeekedCards(prev => [...prev, { playerIndex, row, col }]);
-      // Highlight the opponent whenever an opponent card is tapped.
-      // Selecting your own card first leaves the target null until the
-      // opponent card is picked — single-target version is intentional.
+      // Sync cue card so all clients anchor to the newly selected card.
+      setPowerCueCard({ playerId: targetPlayerId, cardIndex: flatIndex });
       if (targetPlayerId !== players[0]?.id) {
         setFocusTarget(targetPlayerId);
       }
@@ -1882,14 +1880,16 @@ export default function Game() {
 
       const nextSelections = [...powerSelections, selection];
       setPowerSelections(nextSelections);
+      // Sync cue card so all clients anchor to the newly selected card.
+      setPowerCueCard({ playerId: targetPlayerId, cardIndex: flatIndex });
 
-      // Write the opponent's ID as focus target as soon as their card is tapped.
       if (targetPlayerId !== players[0]?.id) {
         setFocusTarget(targetPlayerId);
       }
 
       if (nextSelections.length === 2) {
         setSelectedPowerCueAnchor(null);
+        setPowerCueCard(null);
         usePower10(
           { playerId: nextSelections[0].playerId, cardFlatIndex: nextSelections[0].cardFlatIndex },
           { playerId: nextSelections[1].playerId, cardFlatIndex: nextSelections[1].cardFlatIndex },
@@ -1909,6 +1909,7 @@ export default function Game() {
     isSamePowerSelection,
     setFocusTarget,
     setPeekRevealCard,
+    setPowerCueCard,
   ]);
   const handlePowerCardClickRef = useRef(handlePowerCardClick);
   handlePowerCardClickRef.current = handlePowerCardClick;
