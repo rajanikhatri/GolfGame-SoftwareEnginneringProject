@@ -417,6 +417,196 @@
   transform: translateY(-10px) rotate(1deg) scale(1.02);
 }
 
+.lobby-rules-card {
+  background:
+    linear-gradient(145deg, rgba(255,193,7,0.12), rgba(255,193,7,0.04)),
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  border: 2px solid rgba(255,193,7,0.22);
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 12px 28px rgba(0,0,0,0.18);
+}
+
+.lobby-rules-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.lobby-rules-card__eyebrow {
+  font-size: 12px;
+  font-weight: 900;
+  color: #FFC107;
+  font-family: 'Nunito', sans-serif;
+  letter-spacing: 0.12em;
+}
+
+.lobby-rules-card__mode {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.72);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: 'Nunito', sans-serif;
+  letter-spacing: 0.08em;
+}
+
+.lobby-rules-card__intro {
+  color: rgba(255,255,255,0.64);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  margin-bottom: 14px;
+  max-width: 760px;
+}
+
+.lobby-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.lobby-rules-pill {
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.lobby-rules-pill__label {
+  color: rgba(255,255,255,0.42);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: 'Nunito', sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.lobby-rules-pill__value {
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: 'Nunito', sans-serif;
+  line-height: 1.4;
+}
+
+.lobby-rules-pill__value--green {
+  color: #5EDC7A;
+}
+
+.lobby-rules-inline-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lobby-rules-stat {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  font-family: 'Nunito', sans-serif;
+}
+
+.lobby-rules-stat--gold {
+  background: rgba(255,193,7,0.14);
+  border: 1px solid rgba(255,193,7,0.26);
+  color: #FFD54F;
+}
+
+.lobby-rules-stat--purple {
+  background: rgba(171,71,188,0.14);
+  border: 1px solid rgba(171,71,188,0.26);
+  color: #CE93D8;
+}
+
+.lobby-rules-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lobby-rules-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(13,71,161,0.24), rgba(255,255,255,0.04));
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.lobby-rules-action__badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+  font-weight: 900;
+  font-family: 'Nunito', sans-serif;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+}
+
+.lobby-rules-action__badge--blue {
+  background: linear-gradient(135deg, #42A5F5, #1565C0);
+  color: white;
+}
+
+.lobby-rules-action__badge--purple {
+  background: linear-gradient(135deg, #CE93D8, #8E24AA);
+  color: white;
+}
+
+.lobby-rules-action__text {
+  color: rgba(255,255,255,0.74);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'Nunito', sans-serif;
+  line-height: 1.45;
+}
+
+.mode-selection-account-bar {
+  max-width: min(92vw, 460px);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.mode-selection-account-profile-wrap {
+  position: relative;
+}
+
+.mode-selection-account-profile {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.mode-selection-account-profile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.22);
+  border-color: rgba(255,255,255,0.28) !important;
+}
+
+.mode-selection-account-popover {
+  z-index: 210;
+}
+
+.mode-selection-content {
+  padding-top: 72px;
+}
+
 .game-screen {
   --game-header-padding: 12px 20px;
   --game-title-size: 28px;
@@ -524,6 +714,33 @@
     --game-felt-height: 320px;
     --game-opponent-scale: 0.94;
     --game-pile-scale: 0.95;
+  }
+}
+
+@media (max-width: 720px) {
+  .mode-selection-content {
+    padding-top: 86px;
+  }
+
+  .mode-selection-account-bar {
+    left: 14px;
+    right: 14px;
+    justify-content: center;
+  }
+
+  .mode-selection-account-popover {
+    right: 50%;
+    transform: translateX(50%);
+    width: min(78vw, 320px);
+  }
+
+  .lobby-rules-grid,
+  .lobby-rules-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-rules-card__header {
+    flex-wrap: wrap;
   }
 }
 

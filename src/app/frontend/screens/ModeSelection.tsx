@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, Zap, Trophy, Users, Copy, Check, LogOut } from 'lucide-react';
+import { Star, Zap, Trophy, Users, Copy, Check, LogOut, User } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
 import { usePlayerAuth } from '../../auth/AuthContext';
 import {
@@ -117,9 +117,24 @@ export default function ModeSelection() {
   const [maxPlayers, setMaxPlayers] = useState<2 | 3 | 4>(4);
   const [createdRoomCode, setCreatedRoomCode] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
-  const accountLabel = profile?.displayName ?? user?.email ?? 'Player';
+  const accountBarRef = useRef<HTMLDivElement | null>(null);
+  const accountEmail = user?.email ?? profile?.email ?? 'No email available';
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!accountBarRef.current?.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => window.removeEventListener('mousedown', handlePointerDown);
+  }, [profileMenuOpen]);
 
   function closeModal() {
     setStep(null);
@@ -213,32 +228,95 @@ export default function ModeSelection() {
       }}
     >
       <div
+        ref={accountBarRef}
+        className="mode-selection-account-bar"
         style={{
-          position: 'fixed',
+          position: 'absolute',
           top: 12,
-          left: 14,
+          right: 14,
           zIndex: 200,
           display: 'flex',
           alignItems: 'center',
           gap: 8,
         }}
       >
-        <span
+        <div
+          className="mode-selection-account-profile-wrap"
           style={{
-            background: 'rgba(0,0,0,0.45)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            borderRadius: 999,
-            padding: '6px 12px',
-            color: 'white',
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: 'Nunito, sans-serif',
+            position: 'relative',
           }}
         >
-          {accountLabel}
-        </span>
+          <button
+            type="button"
+            className="mode-selection-account-profile"
+            aria-label="Show account email"
+            aria-expanded={profileMenuOpen}
+            onClick={() => setProfileMenuOpen((open) => !open)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 42,
+              height: 42,
+              background: 'rgba(0,0,0,0.45)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '50%',
+              color: 'white',
+              cursor: 'pointer',
+            }}
+          >
+            <User size={18} />
+          </button>
+
+          <AnimatePresence>
+            {profileMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                transition={{ duration: 0.16 }}
+                className="mode-selection-account-popover"
+                style={{
+                  position: 'absolute',
+                  top: 50,
+                  right: 0,
+                  minWidth: 220,
+                  maxWidth: 'min(78vw, 320px)',
+                  background: 'rgba(6,13,27,0.94)',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  borderRadius: 16,
+                  padding: '12px 14px',
+                  boxShadow: '0 16px 36px rgba(0,0,0,0.35)',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 900,
+                  letterSpacing: '0.12em',
+                  color: 'rgba(255,255,255,0.45)',
+                  fontFamily: 'Nunito, sans-serif',
+                  marginBottom: 6,
+                }}>
+                  SIGNED IN AS
+                </div>
+                <div style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.5,
+                  color: 'white',
+                  fontFamily: 'Nunito, sans-serif',
+                  wordBreak: 'break-word',
+                }}>
+                  {accountEmail}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         <button
           type="button"
+          className="mode-selection-account-logout"
           onClick={logout}
           style={{
             display: 'flex',
@@ -293,7 +371,7 @@ export default function ModeSelection() {
       ))}
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center gap-10 px-6 w-full max-w-5xl">
+      <div className="mode-selection-content relative z-10 flex flex-col items-center gap-10 px-6 w-full max-w-5xl">
 
         {/* Logo */}
         <motion.div

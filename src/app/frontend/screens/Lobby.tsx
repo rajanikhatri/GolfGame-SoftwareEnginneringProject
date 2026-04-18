@@ -422,21 +422,46 @@ export default function Lobby() {
           </div>
 
           {/* Game rules reminder */}
-          <div style={{
-            background: 'rgba(255,193,7,0.08)',
-            border: '2px solid rgba(255,193,7,0.2)',
-            borderRadius: 16, padding: '16px 20px',
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#FFC107', fontFamily: 'Nunito', letterSpacing: '0.1em', marginBottom: 8 }}>
-              ⛳ HOW TO PLAY
+          <div className="lobby-rules-card">
+            <div className="lobby-rules-card__header">
+              <div className="lobby-rules-card__eyebrow">⛳ HOW TO PLAY</div>
+              <div className="lobby-rules-card__mode">
+                {gameMode === 'solo' ? 'SOLO VS AI' : 'MULTIPLAYER'}
+              </div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', fontFamily: 'Nunito', lineHeight: 1.8 }}>
-              • Lowest score wins<br />
-              • Draw or take from discard, then swap<br />
-              • Matching column = <span style={{ color: '#4CAF50', fontWeight: 800 }}>ZERO points!</span><br />
-              • King = <span style={{ color: '#FFC107', fontWeight: 800 }}>-2 pts</span> • Joker = <span style={{ color: '#AB47BC', fontWeight: 800 }}>-1 pt</span><br />
-              • Discard a <span style={{ color: '#42A5F5', fontWeight: 800 }}>7</span> → peek one of your hidden cards<br />
-              • Discard an <span style={{ color: '#AB47BC', fontWeight: 800 }}>8</span> → spy on an opponent's card
+            <div className="lobby-rules-card__intro">
+              Keep your score as low as possible. Build matching columns, use power cards smartly, and knock at the right moment.
+            </div>
+            <div className="lobby-rules-grid">
+              <div className="lobby-rules-pill">
+                <div className="lobby-rules-pill__label">Goal</div>
+                <div className="lobby-rules-pill__value">Lowest score wins</div>
+              </div>
+              <div className="lobby-rules-pill">
+                <div className="lobby-rules-pill__label">Turn</div>
+                <div className="lobby-rules-pill__value">Draw or take discard, then swap</div>
+              </div>
+              <div className="lobby-rules-pill">
+                <div className="lobby-rules-pill__label">Column Match</div>
+                <div className="lobby-rules-pill__value lobby-rules-pill__value--green">ZERO points</div>
+              </div>
+              <div className="lobby-rules-pill">
+                <div className="lobby-rules-pill__label">Special Scores</div>
+                <div className="lobby-rules-inline-stats">
+                  <span className="lobby-rules-stat lobby-rules-stat--gold">King = -2</span>
+                  <span className="lobby-rules-stat lobby-rules-stat--purple">Joker = -1</span>
+                </div>
+              </div>
+            </div>
+            <div className="lobby-rules-actions">
+              <div className="lobby-rules-action">
+                <span className="lobby-rules-action__badge lobby-rules-action__badge--blue">7</span>
+                <div className="lobby-rules-action__text">Peek one of your hidden cards</div>
+              </div>
+              <div className="lobby-rules-action">
+                <span className="lobby-rules-action__badge lobby-rules-action__badge--purple">8</span>
+                <div className="lobby-rules-action__text">Spy on an opponent&apos;s card</div>
+              </div>
             </div>
           </div>
 
