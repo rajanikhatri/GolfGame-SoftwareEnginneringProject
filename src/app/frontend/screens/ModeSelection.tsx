@@ -227,121 +227,11 @@ export default function ModeSelection() {
         fontFamily: 'Nunito, sans-serif',
       }}
     >
-      <div
-        ref={accountBarRef}
-        className="mode-selection-account-bar"
-        style={{
-          position: 'absolute',
-          top: 12,
-          right: 14,
-          zIndex: 200,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <div
-          className="mode-selection-account-profile-wrap"
-          style={{
-            position: 'relative',
-          }}
-        >
-          <button
-            type="button"
-            className="mode-selection-account-profile"
-            aria-label="Show account email"
-            aria-expanded={profileMenuOpen}
-            onClick={() => setProfileMenuOpen((open) => !open)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 42,
-              height: 42,
-              background: 'rgba(0,0,0,0.45)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: '50%',
-              color: 'white',
-              cursor: 'pointer',
-            }}
-          >
-            <User size={18} />
-          </button>
-
-          <AnimatePresence>
-            {profileMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                transition={{ duration: 0.16 }}
-                className="mode-selection-account-popover"
-                style={{
-                  position: 'absolute',
-                  top: 50,
-                  right: 0,
-                  minWidth: 220,
-                  maxWidth: 'min(78vw, 320px)',
-                  background: 'rgba(6,13,27,0.94)',
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  borderRadius: 16,
-                  padding: '12px 14px',
-                  boxShadow: '0 16px 36px rgba(0,0,0,0.35)',
-                  backdropFilter: 'blur(10px)',
-                }}
-              >
-                <div style={{
-                  fontSize: 10,
-                  fontWeight: 900,
-                  letterSpacing: '0.12em',
-                  color: 'rgba(255,255,255,0.45)',
-                  fontFamily: 'Nunito, sans-serif',
-                  marginBottom: 6,
-                }}>
-                  SIGNED IN AS
-                </div>
-                <div style={{
-                  fontSize: 13,
-                  fontWeight: 800,
-                  lineHeight: 1.5,
-                  color: 'white',
-                  fontFamily: 'Nunito, sans-serif',
-                  wordBreak: 'break-word',
-                }}>
-                  {accountEmail}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        <button
-          type="button"
-          className="mode-selection-account-logout"
-          onClick={logout}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            background: 'rgba(229,57,53,0.8)',
-            border: '1px solid rgba(229,57,53,0.5)',
-            borderRadius: 999,
-            padding: '6px 12px',
-            color: 'white',
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: 'Nunito, sans-serif',
-          }}
-        >
-          <LogOut size={12} /> LOGOUT
-        </button>
-      </div>
-
       {/* Background floating suits */}
       <FloatingShape style={{ top: '5%', left: '3%', opacity: 0.15 }}>
         <div className="float-slow-anim text-8xl">♠</div>
       </FloatingShape>
-      <FloatingShape style={{ top: '8%', right: '5%', opacity: 0.15 }}>
+      <FloatingShape style={{ top: '8%', right: '5%', opacity: 0.15, display: 'none' }}>
         <div className="float-anim text-7xl" style={{ color: '#E53935' }}>♥</div>
       </FloatingShape>
       <FloatingShape style={{ bottom: '12%', left: '6%', opacity: 0.12 }}>
@@ -372,6 +262,118 @@ export default function ModeSelection() {
 
       {/* Content */}
       <div className="mode-selection-content relative z-10 flex flex-col items-center gap-10 px-6 w-full max-w-5xl">
+        <div className="mode-selection-topbar w-full">
+          <div className="mode-selection-topbar__spacer" />
+          <div className="mode-selection-topbar__brand">
+            <div style={{ background: 'linear-gradient(135deg, #FFC107, #FF6F00)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(255,193,7,0.5)', fontSize: 22 }}>⛳</div>
+            <span style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.3em', textTransform: 'uppercase', fontFamily: 'Nunito, sans-serif' }}>THE CARD GAME</span>
+          </div>
+          <div
+            ref={accountBarRef}
+            className="mode-selection-account-bar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div
+              className="mode-selection-account-profile-wrap"
+              style={{
+                position: 'relative',
+              }}
+            >
+              <button
+                type="button"
+                className="mode-selection-account-profile"
+                aria-label="Show account email"
+                aria-expanded={profileMenuOpen}
+                onClick={() => setProfileMenuOpen((open) => !open)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 42,
+                  height: 42,
+                  background: 'rgba(0,0,0,0.45)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '50%',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                <User size={18} />
+              </button>
+
+              <AnimatePresence>
+                {profileMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className="mode-selection-account-popover"
+                    style={{
+                      position: 'absolute',
+                      top: 50,
+                      right: 0,
+                      minWidth: 220,
+                      maxWidth: 'min(78vw, 320px)',
+                      background: 'rgba(6,13,27,0.94)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      borderRadius: 16,
+                      padding: '12px 14px',
+                      boxShadow: '0 16px 36px rgba(0,0,0,0.35)',
+                      backdropFilter: 'blur(10px)',
+                    }}
+                  >
+                    <div style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      letterSpacing: '0.12em',
+                      color: 'rgba(255,255,255,0.45)',
+                      fontFamily: 'Nunito, sans-serif',
+                      marginBottom: 6,
+                    }}>
+                      SIGNED IN AS
+                    </div>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      lineHeight: 1.5,
+                      color: 'white',
+                      fontFamily: 'Nunito, sans-serif',
+                      wordBreak: 'break-word',
+                    }}>
+                      {accountEmail}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <button
+              type="button"
+              className="mode-selection-account-logout"
+              onClick={logout}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: 'rgba(229,57,53,0.8)',
+                border: '1px solid rgba(229,57,53,0.5)',
+                borderRadius: 999,
+                padding: '6px 12px',
+                color: 'white',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'Nunito, sans-serif',
+              }}
+            >
+              <LogOut size={12} /> LOGOUT
+            </button>
+          </div>
+        </div>
 
         {/* Logo */}
         <motion.div
@@ -380,10 +382,6 @@ export default function ModeSelection() {
           transition={{ duration: 0.7, type: 'spring', bounce: 0.4 }}
           className="flex flex-col items-center gap-2"
         >
-          <div className="flex items-center gap-3 mb-1">
-            <div style={{ background: 'linear-gradient(135deg, #FFC107, #FF6F00)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(255,193,7,0.5)', fontSize: 22 }}>⛳</div>
-            <span style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.3em', textTransform: 'uppercase', fontFamily: 'Nunito, sans-serif' }}>THE CARD GAME</span>
-          </div>
           <div className="relative">
             <div style={{ position: 'absolute', top: 6, left: 6, fontSize: 100, fontWeight: 900, color: '#0D2137', fontFamily: 'Nunito, sans-serif', letterSpacing: '-0.02em', userSelect: 'none' }}>GOLF</div>
             <div style={{ position: 'absolute', top: 3, left: 3, fontSize: 100, fontWeight: 900, color: '#0D47A1', fontFamily: 'Nunito, sans-serif', letterSpacing: '-0.02em', userSelect: 'none' }}>GOLF</div>

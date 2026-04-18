@@ -579,10 +579,31 @@
   line-height: 1.45;
 }
 
+.mode-selection-topbar {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+}
+
+.mode-selection-topbar__spacer {
+  min-height: 1px;
+}
+
+.mode-selection-topbar__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+}
+
 .mode-selection-account-bar {
   max-width: min(92vw, 460px);
+  justify-self: end;
   justify-content: flex-end;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .mode-selection-account-profile-wrap {
@@ -604,7 +625,7 @@
 }
 
 .mode-selection-content {
-  padding-top: 72px;
+  padding-top: 20px;
 }
 
 .game-screen {
@@ -718,14 +739,28 @@
 }
 
 @media (max-width: 720px) {
+  .mode-selection-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .mode-selection-topbar__brand {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .mode-selection-topbar__spacer {
+    display: none;
+  }
+
   .mode-selection-content {
-    padding-top: 86px;
+    padding-top: 28px;
   }
 
   .mode-selection-account-bar {
-    left: 14px;
-    right: 14px;
     justify-content: center;
+    flex-wrap: wrap;
   }
 
   .mode-selection-account-popover {
