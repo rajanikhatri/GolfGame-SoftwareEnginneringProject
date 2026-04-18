@@ -158,6 +158,7 @@ export default function EndGame() {
         <AnimatePresence>
           {showScoreboard && (
             <motion.div
+              className="endgame-scoreboard"
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               style={{
@@ -171,7 +172,7 @@ export default function EndGame() {
               }}
             >
               {/* Scoreboard header */}
-              <div style={{
+              <div className="endgame-scoreboard__header" style={{
                 background: 'linear-gradient(135deg, rgba(255,193,7,0.2), rgba(255,193,7,0.05))',
                 borderBottom: '1px solid rgba(255,193,7,0.3)',
                 padding: '14px 24px',
@@ -187,9 +188,10 @@ export default function EndGame() {
               </div>
 
               {/* Scoreboard rows */}
-              <div style={{ padding: '8px 16px' }}>
+              <div className="endgame-scoreboard__rows" style={{ padding: '8px 16px' }}>
                 {sortedPlayers.map((player, rank) => (
                   <motion.div
+                    className="endgame-scoreboard__row"
                     key={player.id}
                     initial={{ x: -40, opacity: 0 }}
                     animate={animateRows ? { x: 0, opacity: 1 } : {}}
@@ -207,12 +209,12 @@ export default function EndGame() {
                     }}
                   >
                     {/* Medal */}
-                    <span style={{ fontSize: 24, flexShrink: 0, width: 36, textAlign: 'center' }}>
+                    <span className="endgame-scoreboard__medal" style={{ fontSize: 24, flexShrink: 0, width: 36, textAlign: 'center' }}>
                       {MEDAL_ICONS[rank]}
                     </span>
 
                     {/* Place label */}
-                    <span style={{
+                    <span className="endgame-scoreboard__place" style={{
                       fontSize: 10, fontWeight: 900,
                       color: MEDAL_COLORS[rank],
                       fontFamily: 'Nunito', letterSpacing: '0.1em',
@@ -220,7 +222,7 @@ export default function EndGame() {
                     }}>{PLACE_LABELS[rank]}</span>
 
                     {/* Avatar */}
-                    <div style={{
+                    <div className="endgame-scoreboard__avatar" style={{
                       width: 40, height: 40, borderRadius: '50%',
                       background: `radial-gradient(circle, ${player.color}40, ${player.color}10)`,
                       border: `2px solid ${player.color}`,
@@ -229,7 +231,7 @@ export default function EndGame() {
                     }}>{player.avatar}</div>
 
                     {/* Name */}
-                    <span style={{
+                    <span className="endgame-scoreboard__name" style={{
                       flex: 1, fontSize: 18, fontWeight: 900,
                       color: rank === 0 ? '#FFC107' : 'white',
                       fontFamily: 'Nunito',
@@ -239,7 +241,7 @@ export default function EndGame() {
                     </span>
 
                     {/* Score */}
-                    <div style={{
+                    <div className="endgame-scoreboard__score" style={{
                       background: rank === 0 ? 'linear-gradient(135deg, #FFD700, #FFA000)' : 'rgba(255,255,255,0.08)',
                       borderRadius: 50, padding: '6px 16px',
                       display: 'flex', alignItems: 'center', gap: 6,
@@ -254,7 +256,7 @@ export default function EndGame() {
                     </div>
 
                     {/* Cards mini */}
-                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                    <div className="endgame-scoreboard__cards" style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                       {player.cards.flat().map((card, ci) => (
                         <GameCard key={ci} card={card ?? undefined} size="sm" style={{ width: 28, height: 40, borderWidth: 2 }} />
                       ))}
@@ -270,10 +272,10 @@ export default function EndGame() {
         <AnimatePresence>
           {showScoreboard && (
             <motion.div
+              className="endgame-actions flex gap-5"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="flex gap-5"
             >
               <button
                 className="arcade-btn arcade-btn-green"

@@ -653,9 +653,16 @@ function PlayerCardGrid({
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div
+      className="game-player-grid"
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--game-player-grid-row-gap, 6px)' }}
+    >
       {player.cards.map((row, ri) => (
-        <div key={ri} style={{ display: 'flex', gap: 6 }}>
+        <div
+          key={ri}
+          className="game-player-grid__row"
+          style={{ display: 'flex', gap: 'var(--game-player-grid-col-gap, 6px)' }}
+        >
           {row.map((card, ci) => {
             const isPeeked = Boolean(revealCards?.some(selection => selection.row === ri && selection.col === ci));
             const isPeekRow = peekPhase && isYou && ri === 1;
@@ -962,14 +969,14 @@ function PlayerPanelComp({
   });
 
   return (
-    <div style={{
+    <div className={`game-player-panel game-player-panel--${position}`} style={{
       display: 'flex',
       flexDirection: isHorizontal ? 'column' : (position === 'left' ? 'row' : 'row-reverse'),
       alignItems: 'center',
-      gap: 10,
+      gap: 'var(--game-player-panel-gap, 10px)',
     }}>
       {/* Player info */}
-      <div style={{
+      <div className="game-player-panel__info" style={{
         background: isActive
           ? `linear-gradient(135deg, ${player.color}30, ${player.color}15)`
           : 'rgba(255,255,255,0.05)',
@@ -1021,7 +1028,7 @@ function PlayerPanelComp({
       </div>
 
       {/* Cards */}
-      <div style={{
+      <div className="game-player-panel__cards" style={{
         outline: hasPowerTargets && powerAccent ? `3px solid ${powerAccent.outline}` : 'none',
         borderRadius: 12,
         padding: hasPowerTargets ? 6 : 0,
@@ -1103,13 +1110,13 @@ function PileArea({
   });
 
   return (
-    <div style={{
+    <div className="game-pile-area" style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: 16,
+      gap: 'var(--game-pile-gap, 16px)',
     }}>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+      <div className="game-pile-area__piles" style={{ display: 'flex', gap: 'var(--game-pile-row-gap, 24px)', alignItems: 'center' }}>
         {/* Draw Pile */}
         <div className="flex flex-col items-center gap-2">
           <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
@@ -1149,7 +1156,7 @@ function PileArea({
                 ▲ DRAW CARD
               </div>
             )}
-            <div style={{
+            <div className="game-header__badge" style={{
               position: 'absolute', top: -24, left: '50%', transform: 'translateX(-50%)',
               background: 'rgba(0,0,0,0.4)', borderRadius: 50, padding: '2px 8px',
               fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', whiteSpace: 'nowrap',
@@ -2101,7 +2108,7 @@ export default function Game() {
     <DebugProfiler id="GameScreen">
       <div
         ref={gameRootRef}
-        className="min-h-screen w-full overflow-hidden font-game relative"
+        className="game-screen min-h-screen w-full overflow-hidden font-game relative"
         style={{
           background: 'radial-gradient(ellipse at 50% 40%, #1565C0 0%, #0D47A1 25%, #0D2137 65%, #060D1B 100%)',
           fontFamily: 'Nunito, sans-serif',
@@ -2110,7 +2117,7 @@ export default function Game() {
       >
         <LayoutGroup id="game-table">
       {/* Subtle grid pattern */}
-      <div style={{
+      <div className="game-screen__pattern" style={{
         position: 'absolute', inset: 0,
         backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
@@ -2118,10 +2125,10 @@ export default function Game() {
       }} />
 
       {/* Table felt */}
-      <div style={{
+      <div className="game-screen__felt" style={{
         position: 'absolute',
         top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: 480, height: 360,
+        width: 'var(--game-felt-width, 480px)', height: 'var(--game-felt-height, 360px)',
         borderRadius: '50%',
         background: 'radial-gradient(ellipse, rgba(27,94,32,0.25) 0%, rgba(27,94,32,0.08) 60%, transparent 100%)',
         border: '2px solid rgba(27,94,32,0.2)',
@@ -2299,17 +2306,17 @@ export default function Game() {
       </AnimatePresence>
 
       {/* Header bar */}
-      <div style={{
+      <div className="game-header" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 20px',
+        padding: 'var(--game-header-padding, 12px 20px)',
         background: 'rgba(0,0,0,0.25)',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
         position: 'relative', zIndex: 10,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
-            fontSize: 28, fontWeight: 900,
+        <div className="game-header__brand" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="game-header__title" style={{
+            fontSize: 'var(--game-title-size, 28px)', fontWeight: 900,
             background: 'linear-gradient(180deg, #FFFFFF, #82B1FF)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
@@ -2325,7 +2332,7 @@ export default function Game() {
             }}>🚨 FINAL ROUND</div>
           )}
           {/* Power card legend */}
-          <div style={{
+          <div className="game-header__legend" style={{
             display: 'flex', gap: 6, alignItems: 'center',
             background: 'rgba(255,255,255,0.06)', borderRadius: 50,
             padding: '4px 12px', border: '1px solid rgba(255,255,255,0.1)',
@@ -2340,7 +2347,7 @@ export default function Game() {
           </div>
         </div>
 
-        <div style={{
+        <div className="game-header__status" style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'rgba(255,255,255,0.08)',
           border: '1px solid rgba(255,255,255,0.12)',
@@ -2356,7 +2363,7 @@ export default function Game() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="game-header__controls" style={{ display: 'flex', gap: 8 }}>
           <button
             className="arcade-btn arcade-btn-blue"
             style={{ fontSize: 12, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -2375,18 +2382,18 @@ export default function Game() {
       </div>
 
       {/* Game table */}
-      <div style={{
+      <div className="game-board" style={{
         flex: 1, position: 'relative', zIndex: 5,
         display: 'grid',
-        gridTemplateRows: 'auto 1fr auto',
-        gridTemplateColumns: 'auto 1fr auto',
-        gap: 12,
-        padding: '16px 20px',
+        gridTemplateRows: 'var(--game-board-rows, auto 1fr auto)',
+        gridTemplateColumns: 'var(--game-board-columns, auto 1fr auto)',
+        gap: 'var(--game-board-gap, 12px)',
+        padding: 'var(--game-board-padding, 16px 20px)',
         minHeight: 0,
       }}>
 
         {/* Top player (P3) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', ...getPlayerDimStyle(2) }}>
+        <div className="game-board__slot game-board__slot--top" style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', ...getPlayerDimStyle(2) }}>
           {p3 && (
             <MemoPlayerPanelComp
               player={p3}
@@ -2416,7 +2423,7 @@ export default function Game() {
         </div>
 
         {/* Left player (P2) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', ...getPlayerDimStyle(1) }}>
+        <div className="game-board__slot game-board__slot--left" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', ...getPlayerDimStyle(1) }}>
           {p2 && (
             <MemoPlayerPanelComp
               player={p2}
@@ -2446,9 +2453,9 @@ export default function Game() {
         </div>
 
         {/* Center area */}
-        <div ref={pileAreaNodeRef} style={{
+        <div ref={pileAreaNodeRef} className="game-board__center" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '8px 24px',
+          padding: 'var(--game-center-padding, 8px 24px)',
         }}>
           <DebugProfiler id="PileArea">
             <PileArea
@@ -2465,7 +2472,7 @@ export default function Game() {
         </div>
 
         {/* Right player (P4) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...getPlayerDimStyle(3) }}>
+        <div className="game-board__slot game-board__slot--right" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', ...getPlayerDimStyle(3) }}>
           {p4 && (
             <MemoPlayerPanelComp
               player={p4}
@@ -2495,15 +2502,15 @@ export default function Game() {
         </div>
 
         {/* Bottom player (P1 - YOU) */}
-        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerDimStyle(0) }}>
+        <div className="game-board__slot game-board__slot--bottom game-bottom-section" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerDimStyle(0) }}>
           {/* Player hand */}
-          <div style={{
+          <div className="game-bottom-panel" style={{
             position: 'relative',
             background: isMyTurn
               ? 'linear-gradient(135deg, rgba(88, 28, 135, 0.28), rgba(194, 65, 12, 0.14))'
               : 'rgba(255,255,255,0.04)',
             border: isMyTurn ? '2px solid rgba(251, 191, 36, 0.88)' : '2px solid rgba(255,255,255,0.08)',
-            borderRadius: 20, padding: '16px 24px',
+            borderRadius: 20, padding: 'var(--game-bottom-panel-padding, 16px 24px)',
             boxShadow: isMyTurn ? '0 0 34px rgba(251, 191, 36, 0.24), inset 0 0 18px rgba(147, 51, 234, 0.12)' : 'none',
             transition: 'all 0.3s ease',
             animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
@@ -2512,7 +2519,7 @@ export default function Game() {
             <AnimatePresence>
               {discardLandingPlayerIds.includes(p1.id) && <DiscardLandingCue />}
             </AnimatePresence>
-            <div style={{
+            <div className="game-bottom-panel__meta" style={{
               display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
             }}>
               <div style={{
@@ -2597,39 +2604,41 @@ export default function Game() {
               )}
             </div>
 
-            <DebugProfiler id="BottomPlayerGrid">
-              <PlayerCardGrid
-                player={p1}
-                isActive={isMyTurn}
-                isYou={true}
-                onCardClick={handleCardClick}
-                selectedForSwap={swapMode}
-                revealCards={buildRevealCards(0)}
-                powerSelectableCards={buildSelectablePowerCards(0)}
-                powerSelectedCards={buildSelectedPowerCards(0)}
-                powerConfirmCards={buildPowerConfirmCards(p1.id)}
-                powerSwapGlowCardIds={powerSwapGlowCardIds}
-                powerModeActive={powerInteractionActive}
-                powerTone={powerTone}
-                onPowerClick={handlePowerClickP1}
-                reactionSelectable={reactionMode}
-                onReactionClick={handleReactionCardClick}
-                reactionSelected={submittedReactionCard}
-                peekPhase={peekActive}
-                registerCardNode={registerCardNode}
-                peekHighlightCards={buildPeekHighlightCards(0)}
-              />
-            </DebugProfiler>
+            <div className="game-bottom-panel__grid">
+              <DebugProfiler id="BottomPlayerGrid">
+                <PlayerCardGrid
+                  player={p1}
+                  isActive={isMyTurn}
+                  isYou={true}
+                  onCardClick={handleCardClick}
+                  selectedForSwap={swapMode}
+                  revealCards={buildRevealCards(0)}
+                  powerSelectableCards={buildSelectablePowerCards(0)}
+                  powerSelectedCards={buildSelectedPowerCards(0)}
+                  powerConfirmCards={buildPowerConfirmCards(p1.id)}
+                  powerSwapGlowCardIds={powerSwapGlowCardIds}
+                  powerModeActive={powerInteractionActive}
+                  powerTone={powerTone}
+                  onPowerClick={handlePowerClickP1}
+                  reactionSelectable={reactionMode}
+                  onReactionClick={handleReactionCardClick}
+                  reactionSelected={submittedReactionCard}
+                  peekPhase={peekActive}
+                  registerCardNode={registerCardNode}
+                  peekHighlightCards={buildPeekHighlightCards(0)}
+                />
+              </DebugProfiler>
+            </div>
           </div>
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div className="game-action-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {phase === 'swap' && isMyTurn && drawnCard && (
               <>
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="arcade-btn arcade-btn-blue"
+                  className="game-action-button arcade-btn arcade-btn-blue"
                   style={{ fontSize: 14, padding: '10px 20px' }}
                   onClick={discardDrawn}
                 >
@@ -2657,7 +2666,7 @@ export default function Game() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 whileTap={{ scale: 0.95 }}
-                className="arcade-btn arcade-btn-blue"
+                className="game-action-button arcade-btn arcade-btn-blue"
                 style={{ fontSize: 13, padding: '10px 18px' }}
                 onClick={skipPower}
               >
@@ -2670,7 +2679,7 @@ export default function Game() {
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="arcade-btn arcade-btn-blue"
+                  className="game-action-button arcade-btn arcade-btn-blue"
                   style={{ fontSize: 13, padding: '10px 18px' }}
                   onClick={() => commitPower9Choice(false)}
                 >
@@ -2679,7 +2688,7 @@ export default function Game() {
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="arcade-btn arcade-btn-blue"
+                  className="game-action-button arcade-btn arcade-btn-blue"
                   style={{ fontSize: 13, padding: '10px 18px' }}
                   onClick={() => commitPower9Choice(true)}
                 >
@@ -2691,7 +2700,7 @@ export default function Game() {
             {!finalRound && isMyTurn && phase === 'draw' && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                className="arcade-btn arcade-btn-red"
+                className="game-action-button arcade-btn arcade-btn-red"
                 style={{ fontSize: 15, padding: '12px 24px' }}
                 onClick={knock}
               >
@@ -2700,7 +2709,7 @@ export default function Game() {
               </motion.button>
             )}
 
-            <div style={{
+            <div className="game-action-hint" style={{
               background: 'rgba(0,0,0,0.3)',
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 12, padding: '8px 16px',
