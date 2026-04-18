@@ -22,6 +22,7 @@ import {
   knock,
   endPeekPhase,
   removePlayer,
+  giveAwayCard,
   type GameState,
 } from '../backend/gameEngine';
 
@@ -155,15 +156,23 @@ export async function syncDiscardDrawn(roomCode: string): Promise<void> {
 // Reaction: use Firestore server timestamp for fair timing
 export async function syncReaction(
   roomCode: string,
+  targetPlayerId: string,
   cardIndex: number,
 ): Promise<void> {
   const user = await ensureAnonymousUser();
-  // Use Date.now() as best-effort timestamp — close enough for class project
-  // For production you'd use a Cloud Function to stamp with server time
   const timestamp = Date.now();
+
   await applyAction(roomCode, state =>
-    submitReaction(state, user.uid, cardIndex, timestamp)
+    submitReaction(state, user.uid, targetPlayerId, cardIndex, timestamp)
   );
+}
+
+export async function syncGiveAwayCard(
+  roomCode: string,
+  giverCardIndex: number,
+): Promise<void> {
+  const user = await ensureAnonymousUser();
+  await applyAction(roomCode, state => giveAwayCard(state, user.uid, giverCardIndex));
 }
 
 export async function syncResolveReactionWindow(roomCode: string): Promise<void> {
@@ -177,4 +186,31 @@ export async function syncKnock(roomCode: string): Promise<void> {
 
 export async function syncRemovePlayer(roomCode: string, playerId: string): Promise<void> {
   await applyAction(roomCode, state => removePlayer(state, playerId));
+}
+
+// Sets or clears the UI-only powerFocusTargetId field so all connected clients
+// can highlight the targeted opponent's panel in real time during power cards 8/9/10.
+export async function syncSetPowerFocusTarget(
+  roomCode: string,
+  targetPlayerId: string | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, powerFocusTargetId: targetPlayerId }));
+}
+
+// Sets or clears the most-recently selected card during power 9/10 selection so all
+// connected clients can anchor the hand cue to the correct card position.
+export async function syncSetPowerCueCard(
+  roomCode: string,
+  card: { playerId: string; cardIndex: number } | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, powerCueCard: card }));
+}
+
+// Sets or clears which specific card is being peeked (power 7 = own card,
+// power 8 = opponent card) so all connected clients can show the reveal.
+export async function syncSetPeekRevealCard(
+  roomCode: string,
+  card: { playerId: string; cardIndex: number } | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, peekRevealCard: card }));
 }

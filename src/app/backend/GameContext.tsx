@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { registerPresence, subscribeToRoomPresence } from '../database/firebase';
+import { completeRoomMatch } from '../database/firebaseRooms';
 import {
   subscribeToGameState,
   syncEndPeek,
@@ -18,18 +19,52 @@ import {
   syncResolveReactionWindow,
   saveInitialGameState,
   syncRemovePlayer,
+  syncGiveAwayCard,
+  syncSetPowerFocusTarget,
+  syncSetPeekRevealCard,
+  syncSetPowerCueCard,
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
+  drawFromPile as engineDrawFromPile,
+  takeFromDiscard as engineTakeFromDiscard,
+  skipPower as engineSkipPower,
+  usePower7 as engineUsePower7,
+  usePower8 as engineUsePower8,
+  selectPower9Card as engineSelectPower9Card,
+  confirmPower9 as engineConfirmPower9,
+  usePower10 as engineUsePower10,
+  swapCard as engineSwapCard,
+  discardDrawnCard as engineDiscardDrawnCard,
+  submitReaction as engineSubmitReaction,
+  resolveReactionWindow as engineResolveReactionWindow,
+  giveAwayCard as engineGiveAwayCard,
+  knock as engineKnock,
   getCardValue,
   type GameState,
   type GamePhase as EnginePhase,
 } from './gameEngine';
 
+type PerfGlobal = typeof globalThis & {
+  __GOLF_DEBUG_PERF__?: boolean;
+};
+
+function isPerfDebugEnabled() {
+  if (!import.meta.env.DEV) return false;
+
+  const perfGlobal = globalThis as PerfGlobal;
+  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
+  const storageFlag =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('golf:debug-perf') === '1';
+
+  return globalFlag || storageFlag;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Suit = 'hearts' | 'diamonds' | 'spades' | 'clubs' | 'joker';
-export type GamePhase = 'peek' | 'draw' | 'swap' | 'match_window' | 'power' | 'game_over';
+export type GamePhase = 'peek' | 'draw' | 'swap' | 'match_window' | 'power' | 'giveaway' | 'game_over';
 
 export interface Card {
   id: string;
@@ -80,6 +115,13 @@ export interface PowerCardSelection {
   cardFlatIndex: number;
 }
 
+interface AICardMemory {
+  cardId: string;
+  value: number;
+  confidence: number;
+  seenAt: number;
+}
+
 interface GameContextType {
   gameMode: 'multiplayer' | 'solo' | null;
   setGameMode: (mode: 'multiplayer' | 'solo') => void;
@@ -105,6 +147,14 @@ interface GameContextType {
   chatMessages: ChatMessage[];
   lastPlayedCard: Card | null;
   pendingPower: '7' | '8' | '9' | '10' | null;
+  power9Selection: { playerId: string; cardIndex: number }[] | null;
+  powerFocusTargetId: string | null;
+  peekRevealCard: { playerId: string; cardIndex: number } | null;
+  powerCueCard: { playerId: string; cardIndex: number } | null;
+  giveawayGiverId: string | null;
+  setFocusTarget: (targetPlayerId: string | null) => void;
+  setPeekRevealCard: (card: { playerId: string; cardIndex: number } | null) => void;
+  setPowerCueCard: (card: { playerId: string; cardIndex: number } | null) => void;
   // Called from Lobby when game is about to start (multiplayer).
   // Host passes roomPlayerIds to create the deck in Firestore; joiners omit it.
   initMultiplayer: (
@@ -118,7 +168,8 @@ interface GameContextType {
   takeFromDiscard: () => void;
   swapCard: (row: number, col: number) => void;
   discardDrawn: () => void;
-  reactToDiscard: (row: number, col: number) => void;
+  reactToDiscard: (targetPlayerId: string, row: number, col: number) => void;
+  giveAwayCardAction: (row: number, col: number) => void;
   knock: () => void;
   skipPower: () => void;
   swapCountdown: number | null;
@@ -215,30 +266,75 @@ function flatCardsToRows(flat: (Card | null)[]): (Card | null)[][] {
   return rows.length > 0 ? rows : [[null, null]];
 }
 
-function addCardToGrid(cards: (Card | null)[][], card: Card): (Card | null)[][] {
-  const nextCards = cards.map(row => [...row]);
-  for (let row = 0; row < nextCards.length; row++) {
-    for (let col = 0; col < 2; col++) {
-      if (nextCards[row]?.[col] === null) {
-        nextCards[row][col] = card;
-        return nextCards;
+function rowsToFlatCards(rows: (Card | null)[][]): (Card | null)[] {
+  return rows.flatMap(row => [row[0] ?? null, row[1] ?? null]);
+}
+
+function mapContextPhaseToEngine(phase: GamePhase): EnginePhase {
+  if (phase === 'match_window') return 'react';
+  return phase as EnginePhase;
+}
+
+function createMemoryKey(playerId: string, cardIndex: number): string {
+  return `${playerId}:${cardIndex}`;
+}
+
+function cardsMatchForRender(
+  previousCards: (Card | null)[][],
+  nextCards: (Card | null)[][],
+): boolean {
+  if (previousCards.length !== nextCards.length) return false;
+
+  for (let row = 0; row < previousCards.length; row++) {
+    const previousRow = previousCards[row] ?? [];
+    const nextRow = nextCards[row] ?? [];
+    if (previousRow.length !== nextRow.length) return false;
+
+    for (let col = 0; col < previousRow.length; col++) {
+      const previousCard = previousRow[col];
+      const nextCard = nextRow[col];
+
+      if (previousCard === nextCard) continue;
+      if (!previousCard || !nextCard) {
+        if (previousCard !== nextCard) return false;
+        continue;
+      }
+
+      if (
+        previousCard.id !== nextCard.id ||
+        previousCard.faceUp !== nextCard.faceUp ||
+        previousCard.rank !== nextCard.rank ||
+        previousCard.suit !== nextCard.suit ||
+        previousCard.value !== nextCard.value
+      ) {
+        return false;
       }
     }
   }
-  nextCards.push([card, null]);
-  return nextCards;
+
+  return true;
 }
 
-function clonePenaltyCard(card: Card, ownerId: string): Card {
-  return {
-    ...card,
-    id: `${card.id}-penalty-${ownerId}-${Math.random().toFixed(6)}`,
-    faceUp: false,
-  };
-}
+function reuseStablePlayers(previousPlayers: Player[], nextPlayers: Player[]): Player[] {
+  if (previousPlayers.length === 0) return nextPlayers;
 
-function flatIndexToRowCol(flatIndex: number): { row: number; col: number } {
-  return { row: Math.floor(flatIndex / 2), col: flatIndex % 2 };
+  return nextPlayers.map(nextPlayer => {
+    const previousPlayer = previousPlayers.find(player => player.id === nextPlayer.id);
+    if (!previousPlayer) return nextPlayer;
+
+    const samePlayer =
+      previousPlayer.name === nextPlayer.name &&
+      previousPlayer.avatar === nextPlayer.avatar &&
+      previousPlayer.color === nextPlayer.color &&
+      previousPlayer.glowColor === nextPlayer.glowColor &&
+      previousPlayer.score === nextPlayer.score &&
+      previousPlayer.isAI === nextPlayer.isAI &&
+      previousPlayer.isReady === nextPlayer.isReady &&
+      previousPlayer.hasKnocked === nextPlayer.hasKnocked &&
+      cardsMatchForRender(previousPlayer.cards, nextPlayer.cards);
+
+    return samePlayer ? previousPlayer : nextPlayer;
+  });
 }
 
 // Convert engine GameState → local Player[] (reordered so myPlayerId is first)
@@ -279,7 +375,8 @@ function engineStateToPlayers(
 // Map engine phase to context phase
 function mapPhase(enginePhase: EnginePhase): GamePhase {
   if (enginePhase === 'react') return 'match_window';
-  if (enginePhase === 'peek')  return 'peek';
+  if (enginePhase === 'peek') return 'peek';
+  if (enginePhase === 'giveaway') return 'giveaway';
   return enginePhase as GamePhase;
 }
 
@@ -333,6 +430,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages,       setChatMessages]       = useState<ChatMessage[]>(LOBBY_MESSAGES);
   const [lastPlayedCard,     setLastPlayedCard]     = useState<Card | null>(null);
   const [pendingPower,          setPendingPower]          = useState<'7' | '8' | '9' | '10' | null>(null);
+  const [power9Selection,       setPower9Selection]       = useState<{ playerId: string; cardIndex: number }[] | null>(null);
+  const [powerFocusTargetId,    setPowerFocusTargetId]    = useState<string | null>(null);
+  const [peekRevealCard,        setPeekRevealCardState]    = useState<{ playerId: string; cardIndex: number } | null>(null);
+  const [powerCueCard,          setPowerCueCardState]       = useState<{ playerId: string; cardIndex: number } | null>(null);
+  const [giveawayGiverId,       setGiveawayGiverId]       = useState<string | null>(null);
   const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string | null>(null);
   const [swapCountdown,         setSwapCountdown]         = useState<number | null>(null);
 
@@ -341,6 +443,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const playersRef     = useRef<Player[]>([]);
   const finalRoundRef  = useRef(false);
   const knockedByRef   = useRef<string | null>(null);
+  const currentPlayerIndexRef = useRef(0);
+  const lastPlayedCardRef = useRef<Card | null>(null);
+  const drawnCardRef = useRef<Card | null>(null);
+  const phaseRef = useRef<GamePhase>('draw');
+  const pendingPowerRef = useRef<'7' | '8' | '9' | '10' | null>(null);
+  const matchWindowActiveRef = useRef(false);
+  const aiMemoryRef = useRef<Record<string, Record<string, AICardMemory>>>({});
   const gameActiveRef  = useRef(false);
   const matchTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const swapTimerRef       = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -348,6 +457,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const playerProfilesRef  = useRef<PlayerProfile[]>([]);
   const myPlayerIdRef      = useRef('');
   const lastGameStateRef   = useRef<GameState | null>(null);
+  const soloPendingGiveawayRef = useRef<{ giverId: string; receiverId: string } | null>(null);
 
   // These four are updated in effects (only used in async callbacks, fine to be one render late)
   useEffect(() => { drawPileRef.current    = drawPile;    }, [drawPile]);
@@ -356,6 +466,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { finalRoundRef.current  = finalRound;  }, [finalRound]);
   useEffect(() => { knockedByRef.current   = knockedBy;   }, [knockedBy]);
   useEffect(() => { roomCodeRef.current    = roomCode;    }, [roomCode]);
+  useEffect(() => { currentPlayerIndexRef.current = currentPlayerIndex; }, [currentPlayerIndex]);
+  useEffect(() => { lastPlayedCardRef.current = lastPlayedCard; }, [lastPlayedCard]);
+  useEffect(() => { drawnCardRef.current = drawnCard; }, [drawnCard]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { pendingPowerRef.current = pendingPower; }, [pendingPower]);
+  useEffect(() => { matchWindowActiveRef.current = matchWindowActive; }, [matchWindowActive]);
 
   // These two must be in sync during render so applyEngineState always reads the latest value
   playerProfilesRef.current = playerProfiles;
@@ -442,6 +558,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => { if (matchTimerRef.current) clearInterval(matchTimerRef.current); };
   }, [gameMode, matchWindowActive]);
 
+  useEffect(() => {
+    if (gameMode !== 'multiplayer' || !roomCode) return;
+    if (phase !== 'game_over') return;
+
+    completeRoomMatch(roomCode).catch(console.error);
+  }, [gameMode, roomCode, phase]);
+
   // ── 10-second swap decision timer ───────────────────────────────────────────
   // Starts when it's the local player's turn and the phase is 'swap' or 'power'.
   // Auto-discards the drawn card if the player doesn't act in time.
@@ -474,7 +597,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const { players: newPlayers, localCurrentIndex } =
       engineStateToPlayers(state, playerProfilesRef.current, myPlayerIdRef.current);
 
-    setPlayers(newPlayers);
+    setPlayers(previousPlayers => {
+      const nextPlayers = reuseStablePlayers(previousPlayers, newPlayers);
+
+      if (isPerfDebugEnabled()) {
+        const reusedPlayers = nextPlayers.filter((player, index) => player === previousPlayers[index]).length;
+        console.debug('[perf] applyEngineState', {
+          phase: state.phase,
+          drawPile: state.drawPile.length,
+          discardPile: state.discardPile.length,
+          drawnCard: state.drawnCard?.id ?? null,
+          reusedPlayers,
+          totalPlayers: nextPlayers.length,
+        });
+      }
+
+      return nextPlayers;
+    });
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(localCurrentIndex);
@@ -491,6 +630,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setKnockedBy(state.knockedById);
     setMatchWindowActive(state.reactionWindowOpen);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
+    setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
+    setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
+    setPeekRevealCardState((state.peekRevealCard as { playerId: string; cardIndex: number } | null) ?? null);
+    setPowerCueCardState((state.powerCueCard as { playerId: string; cardIndex: number } | null) ?? null);
+    setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
 
     if (state.phase === 'game_over') {
@@ -500,6 +644,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         { id: '', score: Infinity },
       ).id;
       setWinner(newPlayers.find(p => p.id === winnerId) ?? null);
+    } else {
+      setWinner(null);
     }
   }
 
@@ -531,49 +677,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // ── Solo helpers ────────────────────────────────────────────────────────────
 
-  const soloEndGame = useCallback((finalPlayers: Player[]) => {
-    gameActiveRef.current = false;
-    const scored = finalPlayers.map(p => ({
-      ...p,
-      score: calcScore(p.cards),
-      cards: p.cards.map(row => row.map(c => c ? { ...c, faceUp: true } : null)),
-    }));
-    const winnerP = scored.reduce((a, b) => a.score < b.score ? a : b);
-    setPlayers(scored);
-    setWinner(winnerP);
-    setPhase('game_over');
-  }, []);
-
-  const soloShowMatchWindow = useCallback((onComplete: () => void) => {
-    setMatchWindowActive(true);
-    setMatchCountdown(3);
-    let count = 3;
-    if (matchTimerRef.current) clearInterval(matchTimerRef.current);
-    matchTimerRef.current = setInterval(() => {
-      count--;
-      setMatchCountdown(count);
-      if (count <= 0) {
-        if (matchTimerRef.current) clearInterval(matchTimerRef.current);
-        setMatchWindowActive(false);
-        onComplete();
-      }
-    }, 1000);
-  }, []);
-
-  const soloAdvanceTurn = useCallback((
-    fromIndex: number,
-    currentPlayers: Player[],
-    currentFinalRound: boolean,
-    currentKnockedBy: string | null,
-  ) => {
-    const nextIndex = (fromIndex + 1) % currentPlayers.length;
-    if (currentFinalRound && currentKnockedBy) {
-      const knockerIdx = currentPlayers.findIndex(p => p.id === currentKnockedBy);
-      if (nextIndex === knockerIdx) { soloEndGame(currentPlayers); return; }
-    }
-    setCurrentPlayerIndex(nextIndex);
-    setPhase('draw');
-  }, [soloEndGame]);
+  const soloReactionsRef = useRef<Array<{
+    playerId: string;
+    targetPlayerId: string;
+    cardIndex: number;
+    timestamp: number;
+  }>>([]);
+  const resolveSoloReactionWindow = useCallback(() => {
+    let state = buildSoloEngineState({
+      phase: 'react',
+      reactionWindowOpen: true,
+      reactions: soloReactionsRef.current,
+    });
+    state = engineResolveReactionWindow(state);
+    soloReactionsRef.current = [];
+    applySoloEngineState(state);
+  }, [applySoloEngineState, buildSoloEngineState]);
 
   // ── AI Turn (solo only) ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -588,63 +707,219 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const timer = setTimeout(() => {
       setAiThinking(false);
-      let pile = [...drawPileRef.current];
-      if (pile.length === 0) {
-        const [keepTop, ...rest] = discardPileRef.current;
-        if (rest.length === 0) {
-          soloAdvanceTurn(currentPlayerIndex, playersRef.current, finalRoundRef.current, knockedByRef.current);
-          return;
+
+      const actingPlayerId = playersRef.current[currentPlayerIndexRef.current]?.id;
+      if (!actingPlayerId) return;
+
+      let state = engineDrawFromPile(buildSoloEngineState(), actingPlayerId);
+      if (state.phase === 'power' && state.pendingPower) {
+        const actingHand = state.hands.find(hand => hand.playerId === actingPlayerId);
+        const aiMemory = aiMemoryRef.current[actingPlayerId] ?? {};
+
+        if (state.pendingPower === '7') {
+          const ownIndex = actingHand?.cards.findIndex((card, index) => {
+            if (!card || card.faceUp) return false;
+            const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
+            return Boolean(memory && memory.cardId === card.id && memory.confidence >= 0.8);
+          }) ?? -1;
+          if (ownIndex >= 0 && actingHand?.cards[ownIndex]) {
+            rememberCardForAI(actingPlayerId, actingPlayerId, ownIndex, actingHand.cards[ownIndex] as Card, 1);
+          }
+          state = ownIndex >= 0 ? engineUsePower7(state, actingPlayerId, ownIndex) : engineSkipPower(state, actingPlayerId);
+        } else if (state.pendingPower === '8') {
+          const target = state.hands
+            .filter(hand => hand.playerId !== actingPlayerId)
+            .flatMap(hand => hand.cards.map((card, index) => ({ playerId: hand.playerId, index, card })))
+            .find(entry => {
+              if (!entry.card || entry.card.faceUp) return false;
+              const memory = aiMemory[createMemoryKey(entry.playerId, entry.index)];
+              return Boolean(memory && memory.cardId === entry.card.id && memory.confidence >= 0.8);
+            });
+          if (target?.card) {
+            rememberCardForAI(actingPlayerId, target.playerId, target.index, target.card as Card, 1);
+          }
+          state = target
+            ? engineUsePower8(state, actingPlayerId, target.playerId, target.index)
+            : engineSkipPower(state, actingPlayerId);
+        } else if (state.pendingPower === '9') {
+          const selections = state.hands
+            .flatMap(hand =>
+              hand.cards.map((card, index) => ({
+                playerId: hand.playerId,
+                cardIndex: index,
+                card,
+              })),
+            )
+            .filter(selection => selection.card !== null)
+            .slice(0, 2);
+
+          if (selections.length === 2 && selections[0].playerId !== selections[1].playerId) {
+            state = engineSelectPower9Card(state, actingPlayerId, selections[0].playerId, selections[0].cardIndex);
+            state = engineSelectPower9Card(state, actingPlayerId, selections[1].playerId, selections[1].cardIndex);
+            rememberCardForAI(actingPlayerId, selections[0].playerId, selections[0].cardIndex, selections[0].card as Card, 1);
+            rememberCardForAI(actingPlayerId, selections[1].playerId, selections[1].cardIndex, selections[1].card as Card, 1);
+            state = engineConfirmPower9(state, actingPlayerId, Math.random() < 0.5);
+          } else {
+            state = engineSkipPower(state, actingPlayerId);
+          }
+        } else if (state.pendingPower === '10') {
+          const selections = state.hands
+            .flatMap(hand => hand.cards.map((card, index) => ({ playerId: hand.playerId, cardIndex: index, card })))
+            .filter(entry => entry.card !== null)
+            .slice(0, 6);
+          const first = selections[0];
+          const second = selections.find(entry => entry.playerId !== first?.playerId);
+          state = first && second
+            ? engineUsePower10(
+                state,
+                actingPlayerId,
+                { playerId: first.playerId, cardIndex: first.cardIndex },
+                { playerId: second.playerId, cardIndex: second.cardIndex },
+              )
+            : engineSkipPower(state, actingPlayerId);
         }
-        pile = shuffleArr(rest.map(c => ({ ...c, faceUp: false })));
-        setDiscardPile(keepTop ? [keepTop] : []);
       }
 
-      const drawn = { ...pile[pile.length - 1], faceUp: true };
-      const newPile = pile.slice(0, pile.length - 1);
-      setDrawPile(newPile);
+      if (state.phase === 'swap' && state.drawnCard) {
+        const actingHand = state.hands.find(hand => hand.playerId === actingPlayerId);
+        const cards = actingHand?.cards ?? [];
+        const aiMemory = aiMemoryRef.current[actingPlayerId] ?? {};
+        let swapIndex = -1;
+        let worstVal = state.drawnCard.value;
 
-      const currentPlayers = [...playersRef.current];
-      const player = { ...currentPlayers[currentPlayerIndex] };
-      const newCards = player.cards.map(r => r.map(c => c ? { ...c } : null));
+        cards.forEach((card, index) => {
+          if (index >= 4 || !card) return;
+          const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
+          const knownValue =
+            card.faceUp ? card.value :
+            memory && memory.cardId === card.id && memory.confidence >= 0.8 ? memory.value :
+            null;
+          if (knownValue !== null && knownValue > worstVal) {
+            worstVal = knownValue;
+            swapIndex = index;
+          }
+        });
 
-      let swapRow = -1, swapCol = -1, worstVal = drawn.value;
-      outer: for (let row = 0; row < 2; row++) {
-        for (let col = 0; col < 2; col++) {
-          const c = newCards[row][col];
-          if (c && !c.faceUp) { swapRow = row; swapCol = col; break outer; }
+        if (swapIndex === -1) {
+          cards.forEach((card, index) => {
+            if (index < 4 && card && !card.faceUp) {
+              const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
+              if (!memory || memory.cardId !== card.id || memory.confidence < 0.8) {
+                swapIndex = index;
+              }
+            }
+          });
         }
-      }
-      if (swapRow === -1) {
-        for (let row = 0; row < 2; row++) {
-          for (let col = 0; col < 2; col++) {
-            const c = newCards[row][col];
-            if (c?.faceUp && c.value > worstVal) { worstVal = c.value; swapRow = row; swapCol = col; }
+
+        state = swapIndex >= 0
+          ? engineSwapCard(state, actingPlayerId, swapIndex)
+          : engineDiscardDrawnCard(state, actingPlayerId);
+
+        if (swapIndex >= 0) {
+          const nextHand = state.hands.find(hand => hand.playerId === actingPlayerId);
+          const swappedCard = nextHand?.cards[swapIndex];
+          if (swappedCard) {
+            rememberCardForAI(actingPlayerId, actingPlayerId, swapIndex, swappedCard as Card, 1);
           }
         }
       }
 
-      let toDiscard: Card;
-      if (swapRow !== -1) {
-        const old = newCards[swapRow][swapCol];
-        newCards[swapRow][swapCol] = { ...drawn, faceUp: false };
-        toDiscard = old ? { ...old, faceUp: true } : drawn;
-      } else {
-        toDiscard = drawn;
-      }
-
-      player.cards = newCards;
-      currentPlayers[currentPlayerIndex] = player;
-      setPlayers(currentPlayers);
-      setLastPlayedCard(toDiscard);
-      setDiscardPile(prev => [toDiscard, ...prev]);
-
-      soloShowMatchWindow(() => {
-        soloAdvanceTurn(currentPlayerIndex, currentPlayers, finalRoundRef.current, knockedByRef.current);
-      });
+      applySoloEngineState(state);
     }, thinkTime);
 
     return () => clearTimeout(timer);
-  }, [gameMode, currentPlayerIndex, phase, players, matchWindowActive, soloShowMatchWindow, soloAdvanceTurn]);
+  }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, gameMode, matchWindowActive, phase, players]);
+
+
+  useEffect(() => {
+    if (gameMode !== 'solo' || !matchWindowActive) return;
+
+    let count = 3;
+    setMatchCountdown(3);
+
+    if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+
+    matchTimerRef.current = setInterval(() => {
+      count--;
+      setMatchCountdown(count);
+
+      if (count <= 0) {
+        if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+        resolveSoloReactionWindow();
+      }
+    }, 1000);
+
+    return () => {
+      if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+    };
+  }, [gameMode, matchWindowActive]);
+
+  useEffect(() => {
+    if (gameMode !== 'solo' || !matchWindowActive) return;
+
+    const discard = lastPlayedCardRef.current;
+    if (!discard) return;
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    playersRef.current.forEach((player) => {
+      if (!player.isAI) return;
+
+      const delay = 300 + Math.random() * 1200;
+
+      const t = setTimeout(() => {
+        const alreadySent = soloReactionsRef.current.some(r => r.playerId === player.id);
+        if (alreadySent) return;
+        const aiMemory = aiMemoryRef.current[player.id] ?? {};
+        const confidentMatches: Array<{ targetPlayerId: string; flatIndex: number; confidence: number }> = [];
+
+        playersRef.current.forEach(target => {
+          target.cards.forEach((row, ri) => {
+            row.forEach((card, ci) => {
+              if (!card) return;
+              const flatIndex = ri * 2 + ci;
+              const memory = aiMemory[createMemoryKey(target.id, flatIndex)];
+              const visibleMatch = card.faceUp && card.value === discard.value;
+              const rememberedMatch = Boolean(
+                memory &&
+                memory.cardId === card.id &&
+                memory.value === discard.value &&
+                memory.confidence >= 0.8,
+              );
+
+              if (visibleMatch) {
+                confidentMatches.push({ targetPlayerId: target.id, flatIndex, confidence: 1 });
+                return;
+              }
+              if (rememberedMatch) {
+                confidentMatches.push({
+                  targetPlayerId: target.id,
+                  flatIndex,
+                  confidence: memory!.confidence,
+                });
+              }
+            });
+          });
+        });
+
+        if (confidentMatches.length === 0) return;
+
+        confidentMatches.sort((a, b) => b.confidence - a.confidence);
+        const pick = confidentMatches[0];
+
+        soloReactionsRef.current.push({
+          playerId: player.id,
+          targetPlayerId: pick.targetPlayerId,
+          cardIndex: pick.flatIndex,
+          timestamp: Date.now(),
+        });
+      }, delay);
+
+      timers.push(t);
+    });
+
+    return () => timers.forEach(clearTimeout);
+  }, [gameMode, matchWindowActive]);
 
   // ── Public Actions ──────────────────────────────────────────────────────────
 
@@ -652,22 +927,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
     setPendingPower(null);
-    const deck = createDeck();
     const configs = roomPlayers
       ? roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }))
       : PLAYER_CONFIGS;
-    const newPlayers: Player[] = configs.map((cfg, i) => {
-      const cards: (Card | null)[][] = [[], []];
-      for (let row = 0; row < 2; row++)
-        for (let col = 0; col < 2; col++)
-          cards[row].push(deck.pop()!);
-      return { ...cfg, cards, score: 0, isAI: roomPlayers ? false : i !== 0, isReady: true, hasKnocked: false };
-    });
-    setPlayers(newPlayers); setDrawPile([...deck]); setDiscardPile([]);
-    setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
-    setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
-    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null);
-  }, []);
+    const profiles = configs.map(cfg => ({
+      id: cfg.id,
+      name: cfg.name,
+      avatar: cfg.avatar,
+      color: cfg.color,
+      glowColor: cfg.glowColor,
+    }));
+    const state = createInitialGameState(configs.map(cfg => cfg.id));
+    aiMemoryRef.current = {};
+    seedSoloAIMemory(state);
+    applySoloEngineState(state, profiles);
+    setAiThinking(false);
+    setMatchCountdown(3);
+  }, [applySoloEngineState]);
 
   const initGameFromState = useCallback((
     state: SerializedGameState,
@@ -676,6 +952,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
     setPendingPower(null);
+    aiMemoryRef.current = {};
     const configs = roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }));
     const newPlayers: Player[] = configs.map((cfg, i) => {
       const flat = state.playerHands[i]?.cards ?? [];
@@ -685,7 +962,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPlayers(newPlayers); setDrawPile(state.drawPile); setDiscardPile(state.discardPile);
     setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
-    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null);
+    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setGiveawayGiverId(null);
   }, []);
 
   const drawFromPile = useCallback(() => {
@@ -694,20 +971,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
-    let pile = [...drawPile];
-    if (pile.length === 0) {
-      const [keepTop, ...rest] = discardPile;
-      if (rest.length === 0) return;
-      pile = shuffleArr(rest.map(c => ({ ...c, faceUp: false })));
-      setDiscardPile(keepTop ? [keepTop] : []);
-    }
-    const card = { ...pile.pop()!, faceUp: true };
-    setDrawPile(pile);
-    setDrawnCard(card);
-    const isPower = ['7', '8', '9', '10'].includes(card.rank);
-    if (isPower) { setPendingPower(card.rank as '7' | '8' | '9' | '10'); setPhase('power'); }
-    else setPhase('swap');
-  }, [gameMode, phase, currentPlayerIndex, drawPile, discardPile]);
+    const nextState = engineDrawFromPile(buildSoloEngineState(), 'p1');
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
 
   const takeFromDiscard = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -715,21 +981,181 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
-    if (discardPile.length === 0) return;
-    const [top, ...rest] = discardPile;
-    setDiscardPile(rest);
-    setDrawnCard({ ...top, faceUp: true });
-    setPhase('swap');
-  }, [gameMode, phase, currentPlayerIndex, discardPile]);
+    const nextState = engineTakeFromDiscard(buildSoloEngineState(), 'p1');
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
 
   const skipPowerAction = useCallback(() => {
     if (gameMode === 'multiplayer') {
       syncSkipPower(roomCodeRef.current).catch(console.error);
       return;
     }
-    setPendingPower(null);
-    setPhase('swap');
-  }, [gameMode]);
+    const nextState = engineSkipPower(buildSoloEngineState(), 'p1');
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode]);
+
+  function buildSoloProfiles(sourcePlayers?: Player[]): PlayerProfile[] {
+    const existingPlayers = sourcePlayers && sourcePlayers.length > 0 ? sourcePlayers : playersRef.current;
+    return PLAYER_CONFIGS.map((cfg, index) => {
+      const existing = existingPlayers.find(player => player.id === cfg.id);
+      return {
+        id: existing?.id ?? cfg.id,
+        name: existing?.name ?? cfg.name,
+        avatar: existing?.avatar ?? cfg.avatar,
+        color: existing?.color ?? cfg.color,
+        glowColor: existing?.glowColor ?? cfg.glowColor,
+      };
+    });
+  }
+
+  function rememberCardForAI(
+    aiPlayerId: string,
+    targetPlayerId: string,
+    cardIndex: number,
+    card: Card,
+    confidence: number,
+  ) {
+    if (!aiMemoryRef.current[aiPlayerId]) aiMemoryRef.current[aiPlayerId] = {};
+    aiMemoryRef.current[aiPlayerId][createMemoryKey(targetPlayerId, cardIndex)] = {
+      cardId: card.id,
+      value: card.value,
+      confidence,
+      seenAt: Date.now(),
+    };
+  }
+
+  function forgetMovedCardMemories(nextState: GameState) {
+    const currentCardsByKey = new Map<string, string>();
+    nextState.hands.forEach(hand => {
+      hand.cards.forEach((card, index) => {
+        if (!card) return;
+        currentCardsByKey.set(createMemoryKey(hand.playerId, index), card.id);
+      });
+    });
+
+    Object.values(aiMemoryRef.current).forEach(memoryMap => {
+      Object.entries(memoryMap).forEach(([key, memory]) => {
+        if (currentCardsByKey.get(key) !== memory.cardId) {
+          delete memoryMap[key];
+        }
+      });
+    });
+  }
+
+  function syncVisibleMemory(nextState: GameState) {
+    const aiIds = nextState.hands
+      .map(hand => hand.playerId)
+      .filter(playerId => playerId !== 'p1');
+
+    nextState.hands.forEach(hand => {
+      hand.cards.forEach((card, index) => {
+        if (!card?.faceUp) return;
+        aiIds.forEach(aiId => {
+          rememberCardForAI(aiId, hand.playerId, index, card as Card, 1);
+        });
+      });
+    });
+  }
+
+  function seedSoloAIMemory(nextState: GameState) {
+    nextState.hands.forEach(hand => {
+      if (hand.playerId === 'p1') return;
+      [2, 3].forEach(index => {
+        const card = hand.cards[index];
+        if (card) rememberCardForAI(hand.playerId, hand.playerId, index, card as Card, 0.95);
+      });
+    });
+  }
+
+  function applySoloEngineState(state: GameState, profiles?: PlayerProfile[]) {
+    forgetMovedCardMemories(state);
+    syncVisibleMemory(state);
+    const profileList = profiles ?? buildSoloProfiles();
+    const nextPlayers: Player[] = state.hands.map((hand, index) => {
+      const profile = profileList.find(entry => entry.id === hand.playerId) ?? profileList[index] ?? PLAYER_CONFIGS[index];
+      const cards = flatCardsToRows(hand.cards as (Card | null)[]);
+      return {
+        id: hand.playerId,
+        name: profile?.name ?? `Player ${index + 1}`,
+        avatar: profile?.avatar ?? PLAYER_AVATARS[index] ?? '🎮',
+        color: profile?.color ?? PLAYER_COLORS[index] ?? '#1E88E5',
+        glowColor: profile?.glowColor ?? GLOW_COLORS[index] ?? 'rgba(30,136,229,0.7)',
+        cards,
+        score: state.scores[hand.playerId] ?? 0,
+        isAI: hand.playerId !== 'p1',
+        isReady: true,
+        hasKnocked: state.knockedById === hand.playerId,
+      };
+    });
+
+    setPlayers(nextPlayers);
+    setDrawPile(state.drawPile as Card[]);
+    setDiscardPile(state.discardPile as Card[]);
+    setCurrentPlayerIndex(state.currentPlayerIndex);
+    setCurrentTurnPlayerId(state.playerOrder[state.currentPlayerIndex] ?? null);
+    setDrawnCard(state.drawnCard ? { ...(state.drawnCard as Card), faceUp: true } : null);
+    setPhase(mapPhase(state.phase));
+    setFinalRound(state.finalRound);
+    setKnockedBy(state.knockedById);
+    setMatchWindowActive(state.reactionWindowOpen);
+    setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
+    setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
+    setLastPlayedCard(state.lastDiscardedCard as Card | null);
+    soloPendingGiveawayRef.current = state.pendingGiveaway;
+    playersRef.current = nextPlayers;
+    drawPileRef.current = state.drawPile as Card[];
+    discardPileRef.current = state.discardPile as Card[];
+    currentPlayerIndexRef.current = state.currentPlayerIndex;
+    drawnCardRef.current = state.drawnCard as Card | null;
+    phaseRef.current = mapPhase(state.phase);
+    finalRoundRef.current = state.finalRound;
+    knockedByRef.current = state.knockedById;
+    pendingPowerRef.current = state.pendingPower as '7' | '8' | '9' | '10' | null;
+    matchWindowActiveRef.current = state.reactionWindowOpen;
+    lastPlayedCardRef.current = state.lastDiscardedCard as Card | null;
+
+    if (state.phase === 'game_over') {
+      const winnerId = Object.entries(state.scores).reduce(
+        (best, [id, score]) => (score < best.score ? { id, score } : best),
+        { id: '', score: Infinity },
+      ).id;
+      setWinner(nextPlayers.find(player => player.id === winnerId) ?? null);
+      gameActiveRef.current = false;
+    } else {
+      setWinner(null);
+    }
+  }
+
+  function buildSoloEngineState(overrides: Partial<GameState> = {}): GameState {
+    const currentPlayers = playersRef.current;
+    return {
+      drawPile: drawPileRef.current,
+      discardPile: discardPileRef.current,
+      hands: currentPlayers.map(player => ({
+        playerId: player.id,
+        cards: rowsToFlatCards(player.cards),
+      })),
+      playerOrder: currentPlayers.map(player => player.id),
+      currentPlayerIndex: currentPlayerIndexRef.current,
+      phase: mapContextPhaseToEngine(phaseRef.current),
+      drawnCard: drawnCardRef.current,
+      pendingPower: pendingPowerRef.current,
+      lastDiscardedCard: lastPlayedCardRef.current,
+      lastDiscardedById: currentPlayers[currentPlayerIndexRef.current]?.id ?? null,
+      reactionWindowOpen: matchWindowActiveRef.current,
+      reactions: soloReactionsRef.current,
+      finalRound: finalRoundRef.current,
+      knockedById: knockedByRef.current,
+      gameOver: phaseRef.current === 'game_over',
+      scores: currentPlayers.reduce<Record<string, number>>((acc, player) => {
+        acc[player.id] = player.score;
+        return acc;
+      }, {}),
+      power9Selection: null,
+      pendingGiveaway: soloPendingGiveawayRef.current,
+      ...overrides,
+    };
+  }
 
   const swapCard = useCallback((row: number, col: number) => {
     if (gameMode === 'multiplayer') {
@@ -738,18 +1164,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (phase !== 'swap' || !drawnCard || currentPlayerIndex !== 0) return;
-    const updated = [...players];
-    const player = { ...updated[0] };
-    const newCards = player.cards.map(r => [...r]);
-    const oldCard = newCards[row][col];
-    newCards[row][col] = { ...drawnCard, faceUp: false };
-    player.cards = newCards;
-    updated[0] = player;
-    const toDiscard = oldCard ? { ...oldCard, faceUp: true } : drawnCard;
-    setPlayers(updated); setLastPlayedCard(toDiscard);
-    setDiscardPile(prev => [toDiscard, ...prev]); setDrawnCard(null);
-    soloShowMatchWindow(() => soloAdvanceTurn(0, updated, finalRoundRef.current, knockedByRef.current));
-  }, [gameMode, phase, drawnCard, currentPlayerIndex, players, soloShowMatchWindow, soloAdvanceTurn]);
+    const flatIndex = row * 2 + col;
+    const nextState = engineSwapCard(buildSoloEngineState(), 'p1', flatIndex);
+    soloReactionsRef.current = [];
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, drawnCard, gameMode, phase]);
 
   const discardDrawn = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -757,92 +1176,97 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (phase !== 'swap' || !drawnCard || currentPlayerIndex !== 0) return;
-    const toDiscard = { ...drawnCard, faceUp: true };
-    setLastPlayedCard(toDiscard);
-    setDiscardPile(prev => [toDiscard, ...prev]);
-    setDrawnCard(null);
-    // Power for ranks 7/8 is handled in the 'power' phase (before reaching swap).
-    // Once in swap phase, just discard normally — no power re-trigger.
-    const currentPlayers = playersRef.current;
-    soloShowMatchWindow(() => soloAdvanceTurn(0, currentPlayers, finalRoundRef.current, knockedByRef.current));
-  }, [gameMode, phase, drawnCard, currentPlayerIndex, soloShowMatchWindow, soloAdvanceTurn]);
+    const nextState = engineDiscardDrawnCard(buildSoloEngineState(), 'p1');
+    soloReactionsRef.current = [];
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, drawnCard, gameMode, phase]);
 
-  const reactToDiscard = useCallback((row: number, col: number) => {
+  const reactToDiscard = useCallback((targetPlayerId: string, row: number, col: number) => {
     const flatIndex = row * 2 + col;
 
     if (gameMode === 'multiplayer') {
       if (!matchWindowActive) return;
-      syncReaction(roomCodeRef.current, flatIndex).catch(console.error);
+      syncReaction(roomCodeRef.current, targetPlayerId, flatIndex).catch(console.error);
       return;
     }
 
-    if (!matchWindowActive || currentPlayerIndex === 0 || !lastPlayedCard) return;
+    if (!matchWindowActive) return;
 
-    const currentPlayers = [...playersRef.current];
-    const player = { ...currentPlayers[0] };
-    const newCards = player.cards.map(r => [...r]);
-    const selectedCard = newCards[row]?.[col];
-    if (!selectedCard) return;
+    const me = playersRef.current[0];
+    if (!me) return;
 
-    if (matchTimerRef.current) clearInterval(matchTimerRef.current);
-    setMatchWindowActive(false);
+    const alreadySent = soloReactionsRef.current.some(r => r.playerId === me.id);
+    if (alreadySent) return;
+    const nextState = engineSubmitReaction(
+      buildSoloEngineState({
+        phase: 'react',
+        reactionWindowOpen: true,
+        reactions: soloReactionsRef.current,
+      }),
+      me.id,
+      targetPlayerId,
+      flatIndex,
+      Date.now(),
+    );
+    soloReactionsRef.current = nextState.reactions;
+  }, [gameMode, matchWindowActive]);
 
-    if (selectedCard.value === lastPlayedCard.value) {
-      newCards[row][col] = null;
-      setDiscardPile(prev => [{ ...selectedCard, faceUp: true }, ...prev]);
-    } else {
-      const reactedPlayerId = player.id;
-      const exposedDiscard = clonePenaltyCard(lastPlayedCard, reactedPlayerId);
-      let nextDiscardPile = discardPileRef.current.length > 0
-        ? discardPileRef.current.slice(1)
-        : [];
-      let penalizedCards = addCardToGrid(newCards, exposedDiscard);
-      let pile = [...drawPileRef.current];
-      setDiscardPile(nextDiscardPile);
-      if (pile.length === 0) {
-        const [keepTop, ...rest] = nextDiscardPile;
-        if (rest.length > 0) {
-          pile = shuffleArr(rest.map(c => ({ ...c, faceUp: false })));
-          nextDiscardPile = keepTop ? [keepTop] : [];
-          setDiscardPile(nextDiscardPile);
-        }
-      }
+  const completeSoloGiveaway = useCallback((row: number, col: number) => {
+    const pending = soloPendingGiveawayRef.current;
+    if (!pending) return;
 
-      if (pile.length > 0) {
-        const penaltyCard = { ...pile[pile.length - 1], faceUp: false };
-        pile = pile.slice(0, pile.length - 1);
-        setDrawPile(pile);
-        penalizedCards = addCardToGrid(penalizedCards, penaltyCard);
-      }
-      player.cards = penalizedCards;
-      currentPlayers[0] = player;
-      setPlayers(currentPlayers);
-      soloAdvanceTurn(currentPlayerIndex, currentPlayers, finalRoundRef.current, knockedByRef.current);
-      return;
-    }
+    const flatIndex = row * 2 + col;
+    const nextState = engineGiveAwayCard(
+      buildSoloEngineState({
+        phase: 'giveaway',
+        pendingGiveaway: pending,
+      }),
+      pending.giverId,
+      flatIndex,
+    );
+    soloPendingGiveawayRef.current = null;
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState]);
 
-    player.cards = newCards;
-    currentPlayers[0] = player;
-    setPlayers(currentPlayers);
-    soloAdvanceTurn(currentPlayerIndex, currentPlayers, finalRoundRef.current, knockedByRef.current);
-  }, [gameMode, matchWindowActive, currentPlayerIndex, lastPlayedCard, soloAdvanceTurn]);
+  const giveAwayCardAction = useCallback((row: number, col: number) => {
+  if (gameMode === 'multiplayer') {
+    const flatIndex = row * 2 + col;
+    syncGiveAwayCard(roomCodeRef.current, flatIndex).catch(console.error);
+    return;
+  }
 
-  const finishSoloPower = useCallback((updatedPlayers?: Player[]) => {
-    if (!drawnCard) {
-      setPendingPower(null);
-      setPhase('swap');
-      return;
-    }
+    completeSoloGiveaway(row, col);
+  }, [gameMode, completeSoloGiveaway]);
 
-    const playersAfterPower = updatedPlayers ?? playersRef.current;
-    const discarded = { ...drawnCard, faceUp: true };
-    setPendingPower(null);
-    setLastPlayedCard(discarded);
-    setDiscardPile(prev => [discarded, ...prev]);
-    setDrawnCard(null);
-    setPhase('match_window');
-    soloShowMatchWindow(() => soloAdvanceTurn(0, playersAfterPower, finalRoundRef.current, knockedByRef.current));
-  }, [drawnCard, soloShowMatchWindow, soloAdvanceTurn]);
+  useEffect(() => {
+    if (gameMode !== 'solo' || phase !== 'giveaway') return;
+
+    const pending = soloPendingGiveawayRef.current;
+    if (!pending) return;
+
+    const giver = players.find(player => player.id === pending.giverId);
+    if (!giver || !giver.isAI) return;
+
+    const timer = setTimeout(() => {
+      const latestPending = soloPendingGiveawayRef.current;
+      if (!latestPending) return;
+
+      const latestGiver = playersRef.current.find(player => player.id === latestPending.giverId);
+      if (!latestGiver || !latestGiver.isAI) return;
+
+      const latestState = buildSoloEngineState({
+        phase: 'giveaway',
+        pendingGiveaway: latestPending,
+      });
+      const giverHand = latestState.hands.find(hand => hand.playerId === latestPending.giverId);
+      const flatIndex = giverHand?.cards.findIndex(card => card !== null) ?? -1;
+      if (flatIndex < 0) return;
+
+      completeSoloGiveaway(Math.floor(flatIndex / 2), flatIndex % 2);
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [gameMode, phase, players, currentPlayerIndex, completeSoloGiveaway]);
 
   const resolvePower = useCallback((targetPlayerId?: string, cardFlatIndex?: number) => {
     if (gameMode === 'multiplayer') {
@@ -862,8 +1286,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setPhase('swap');
       return;
     }
-    finishSoloPower();
-  }, [gameMode, pendingPower, drawnCard, finishSoloPower]);
+    let nextState = buildSoloEngineState();
+    if (pendingPower === '7' && cardFlatIndex !== undefined) {
+      nextState = engineUsePower7(nextState, 'p1', cardFlatIndex);
+    } else if (pendingPower === '8' && targetPlayerId && cardFlatIndex !== undefined) {
+      nextState = engineUsePower8(nextState, 'p1', targetPlayerId, cardFlatIndex);
+    } else {
+      nextState = engineSkipPower(nextState, 'p1');
+    }
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode, pendingPower, drawnCard]);
 
   const selectPower9Card = useCallback((targetPlayerId: string, cardFlatIndex: number) => {
     if (gameMode === 'multiplayer') {
@@ -871,38 +1303,59 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [gameMode]);
 
+  // Immediately writes powerFocusTargetId to Firestore so all non-acting clients
+  // can highlight the targeted player's panel in real time (powers 8/10).
+  // Power 9 target is derived from power9Selection which is already synced by selectPower9Card.
+  const setFocusTargetAction = useCallback((targetPlayerId: string | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerFocusTarget(roomCodeRef.current, targetPlayerId).catch(console.error);
+    }
+  }, [gameMode]);
+
+  const setPeekRevealCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPeekRevealCard(roomCodeRef.current, card).catch(console.error);
+    }
+  }, [gameMode]);
+
+  const setPowerCueCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerCueCard(roomCodeRef.current, card).catch(console.error);
+    }
+  }, [gameMode]);
+
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
-      syncConfirmPower9(roomCodeRef.current, doSwap).catch(console.error);
+      if (selections.length < 2) return;
+
+      (async () => {
+        // Local UI tracks Power 9 selections optimistically, but Firestore remains
+        // authoritative. Re-send both selections before confirming so the first
+        // confirm click still succeeds even if the selection transactions are
+        // still in flight.
+        for (const selection of selections) {
+          await syncSelectPower9Card(
+            roomCodeRef.current,
+            selection.playerId,
+            selection.cardFlatIndex,
+          );
+        }
+
+        await syncConfirmPower9(roomCodeRef.current, doSwap);
+      })().catch(console.error);
       return;
     }
 
     if (selections.length < 2) return;
-
-    const currentPlayers = [...playersRef.current];
-    if (doSwap) {
-      const [sel1, sel2] = selections;
-      const { row: row1, col: col1 } = flatIndexToRowCol(sel1.cardFlatIndex);
-      const { row: row2, col: col2 } = flatIndexToRowCol(sel2.cardFlatIndex);
-      const idx1 = currentPlayers.findIndex(player => player.id === sel1.playerId);
-      const idx2 = currentPlayers.findIndex(player => player.id === sel2.playerId);
-
-      if (idx1 !== -1 && idx2 !== -1) {
-        const player1 = { ...currentPlayers[idx1], cards: currentPlayers[idx1].cards.map(row => [...row]) };
-        const player2 = { ...currentPlayers[idx2], cards: currentPlayers[idx2].cards.map(row => [...row]) };
-        const card1 = player1.cards[row1]?.[col1] ?? null;
-        const card2 = player2.cards[row2]?.[col2] ?? null;
-
-        player1.cards[row1][col1] = card2 ? { ...card2, faceUp: false } : null;
-        player2.cards[row2][col2] = card1 ? { ...card1, faceUp: false } : null;
-        currentPlayers[idx1] = player1;
-        currentPlayers[idx2] = player2;
-        setPlayers(currentPlayers);
-      }
-    }
-
-    finishSoloPower(currentPlayers);
-  }, [gameMode, finishSoloPower]);
+    let nextState = buildSoloEngineState({
+      power9Selection: selections.map(selection => ({
+        playerId: selection.playerId,
+        cardIndex: selection.cardFlatIndex,
+      })),
+    });
+    nextState = engineConfirmPower9(nextState, 'p1', doSwap);
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode]);
 
   const usePower10Action = useCallback((card1: PowerCardSelection, card2: PowerCardSelection) => {
     if (gameMode === 'multiplayer') {
@@ -914,26 +1367,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const currentPlayers = [...playersRef.current];
-    const { row: row1, col: col1 } = flatIndexToRowCol(card1.cardFlatIndex);
-    const { row: row2, col: col2 } = flatIndexToRowCol(card2.cardFlatIndex);
-    const idx1 = currentPlayers.findIndex(player => player.id === card1.playerId);
-    const idx2 = currentPlayers.findIndex(player => player.id === card2.playerId);
-    if (idx1 === -1 || idx2 === -1 || idx1 === idx2) return;
-
-    const player1 = { ...currentPlayers[idx1], cards: currentPlayers[idx1].cards.map(row => [...row]) };
-    const player2 = { ...currentPlayers[idx2], cards: currentPlayers[idx2].cards.map(row => [...row]) };
-    const source1 = player1.cards[row1]?.[col1] ?? null;
-    const source2 = player2.cards[row2]?.[col2] ?? null;
-    if (!source1 || !source2) return;
-
-    player1.cards[row1][col1] = { ...source2, faceUp: false };
-    player2.cards[row2][col2] = { ...source1, faceUp: false };
-    currentPlayers[idx1] = player1;
-    currentPlayers[idx2] = player2;
-    setPlayers(currentPlayers);
-    finishSoloPower(currentPlayers);
-  }, [gameMode, finishSoloPower]);
+    const nextState = engineUsePower10(
+      buildSoloEngineState(),
+      'p1',
+      { playerId: card1.playerId, cardIndex: card1.cardFlatIndex },
+      { playerId: card2.playerId, cardIndex: card2.cardFlatIndex },
+    );
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode]);
 
   const knockAction = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -941,14 +1382,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (currentPlayerIndex !== 0 || finalRound) return;
-    setFinalRound(true);
-    setKnockedBy('p1');
-    setPhase('match_window');
-    finalRoundRef.current = true;
-    knockedByRef.current = 'p1';
-    const currentPlayers = playersRef.current;
-    setTimeout(() => soloAdvanceTurn(0, currentPlayers, true, 'p1'), 2200);
-  }, [gameMode, currentPlayerIndex, finalRound, soloAdvanceTurn]);
+    const nextState = engineKnock(buildSoloEngineState(), 'p1');
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, finalRound, gameMode]);
 
   const sendChat = useCallback((message: string) => {
     setChatMessages(prev => [...prev, {
@@ -977,6 +1413,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setSwapCountdown(null);
     gameActiveRef.current = false;
     setPendingPower(null);
+    aiMemoryRef.current = {};
+    setGiveawayGiverId(null);
     setGameMode(null);
     setMyPlayerId('');
     setPlayerProfiles([]);
@@ -1000,13 +1438,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard,
-      pendingPower,
+      pendingPower, power9Selection, powerFocusTargetId, peekRevealCard, powerCueCard, giveawayGiverId,
+      setFocusTarget: setFocusTargetAction,
+      setPeekRevealCard: setPeekRevealCardAction,
+      setPowerCueCard: setPowerCueCardAction,
       swapCountdown,
       disconnectedPlayerName,
       initMultiplayer,
       initGame, initGameFromState,
       drawFromPile, takeFromDiscard,
       swapCard, discardDrawn, reactToDiscard,
+      giveAwayCardAction,
       knock: knockAction,
       skipPower: skipPowerAction,
       endPeek,
