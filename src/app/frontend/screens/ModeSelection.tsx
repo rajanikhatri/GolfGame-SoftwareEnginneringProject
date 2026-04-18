@@ -2,25 +2,17 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, Zap, Trophy, Users, RefreshCw, Lock, LogIn, Copy, Check } from 'lucide-react';
+import { Star, Zap, Trophy, Users, Copy, Check, LogOut } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
+import { usePlayerAuth } from '../../auth/AuthContext';
 import {
   createRoomWithRetries,
-  getWaitingRooms,
   joinRoomByCode,
-  type FirebaseRoomDoc,
+  normalizeRoomCode,
 } from '../../database/firebaseRooms';
 
 // --- Types ---
-type ModalStep = 'nickname' | 'room-list' | 'create-room' | 'waiting-room' | 'room-password' | null;
-
-interface Room {
-  id: string;
-  name: string;
-  current: number;
-  max: number;
-  hasPassword: boolean;
-}
+type ModalStep = 'nickname' | 'room-list' | 'create-room' | 'waiting-room' | null;
 
 // --- Floating background card ---
 const FloatingShape = ({ style, children }: { style: React.CSSProperties; children: React.ReactNode }) => (
@@ -110,64 +102,32 @@ function DarkBtn({ onClick, children, style }: { onClick: () => void; children: 
 export default function ModeSelection() {
   const navigate = useNavigate();
   const { setGameMode, setPlayerName, setRoomCode } = useGame();
+  const { user, profile, logout } = usePlayerAuth();
 
   // Modal state
   const [step, setStep] = useState<ModalStep>(null);
   const [nickname, setNickname] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [joinRoomCode, setJoinRoomCode] = useState('');
 
   // Create room state
   const [roomNameInput, setRoomNameInput] = useState('');
   const [roomPassword, setRoomPassword] = useState('');
   const [maxPlayers, setMaxPlayers] = useState<2 | 3 | 4>(4);
   const [createdRoomCode, setCreatedRoomCode] = useState('');
-
-  // Join room state
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-  const [joinPassword, setJoinPassword] = useState('');
-  const [joinError, setJoinError] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
-  const [updateMsg, setUpdateMsg] = useState('');
 
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
-
-  function toRoomList(docs: FirebaseRoomDoc[]): Room[] {
-    return docs.map(d => ({
-      id: d.code,
-      name: d.roomName ?? `${d.players[0]?.name ?? 'Unknown'}'s room`,
-      current: d.players.length,
-      max: d.maxPlayers ?? 4,
-      hasPassword: !!d.password,
-    }));
-  }
-
-  async function fetchRooms() {
-    setLoading(true);
-    setError('');
-    try {
-      const docs = await getWaitingRooms();
-      setRooms(toRoomList(docs));
-      setUpdateMsg('Updated!');
-      setTimeout(() => setUpdateMsg(''), 2000);
-    } catch (e) {
-      setError('Failed to load rooms.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const accountLabel = profile?.displayName ?? user?.email ?? 'Player';
 
   function closeModal() {
     setStep(null);
     setNickname('');
-    setSearchQuery('');
+    setJoinRoomCode('');
     setRoomNameInput('');
     setRoomPassword('');
-    setJoinPassword('');
-    setJoinError('');
-    setSelectedRoom(null);
+    setError('');
   }
 
   function handleSoloPlay() {
@@ -182,33 +142,20 @@ export default function ModeSelection() {
     if (!nickname.trim()) return;
     setRoomNameInput(`${nickname.trim()}'s room`);
     setStep('room-list');
-    fetchRooms();
   }
 
-  // Step 2: refresh rooms from Firebase
-  function handleRefreshRooms() {
-    fetchRooms();
-  }
-
-  // Step 2: click a room to join
-  function handleRoomClick(room: Room) {
-    if (room.current >= room.max) return;
-    setSelectedRoom(room);
-    if (room.hasPassword) {
-      setJoinPassword('');
-      setJoinError('');
-      setStep('room-password');
-    } else {
-      joinRoom(room, '');
+  async function handleJoinByCode() {
+    const normalizedCode = normalizeRoomCode(joinRoomCode);
+    if (!normalizedCode) {
+      setError('Enter a valid room code to join.');
+      return;
     }
-  }
 
-  async function joinRoom(room: Room, _password: string) {
     setLoading(true);
     setError('');
     try {
       const name = nickname.trim();
-      await joinRoomByCode(room.id, {
+      await joinRoomByCode(normalizedCode, {
         name,
         avatar: '🎮',
         color: '#1E88E5',
@@ -216,7 +163,7 @@ export default function ModeSelection() {
       });
       flushSync(() => {
         setPlayerName(name);
-        setRoomCode(room.id);
+        setRoomCode(normalizedCode);
         setGameMode('multiplayer');
       });
       navigate('/lobby');
@@ -225,12 +172,6 @@ export default function ModeSelection() {
     } finally {
       setLoading(false);
     }
-  }
-
-  // Password submit for private room
-  async function handlePasswordOk() {
-    if (!selectedRoom) return;
-    await joinRoom(selectedRoom, joinPassword);
   }
 
   // Step 3: create room in Firebase
@@ -263,10 +204,6 @@ export default function ModeSelection() {
     navigate('/lobby');
   }
 
-  const filteredRooms = rooms.filter(r =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <div
       className="min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center font-game"
@@ -275,6 +212,53 @@ export default function ModeSelection() {
         fontFamily: 'Nunito, sans-serif',
       }}
     >
+      <div
+        style={{
+          position: 'fixed',
+          top: 12,
+          left: 14,
+          zIndex: 200,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            background: 'rgba(0,0,0,0.45)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 999,
+            padding: '6px 12px',
+            color: 'white',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: 'Nunito, sans-serif',
+          }}
+        >
+          {accountLabel}
+        </span>
+        <button
+          type="button"
+          onClick={logout}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            background: 'rgba(229,57,53,0.8)',
+            border: '1px solid rgba(229,57,53,0.5)',
+            borderRadius: 999,
+            padding: '6px 12px',
+            color: 'white',
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'Nunito, sans-serif',
+          }}
+        >
+          <LogOut size={12} /> LOGOUT
+        </button>
+      </div>
+
       {/* Background floating suits */}
       <FloatingShape style={{ top: '5%', left: '3%', opacity: 0.15 }}>
         <div className="float-slow-anim text-8xl">♠</div>
@@ -544,72 +528,35 @@ export default function ModeSelection() {
           </Modal>
         )}
 
-        {/* STEP 2: Match List */}
+        {/* STEP 2: Join With Room Code */}
         {step === 'room-list' && (
           <Modal onClose={closeModal}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 26, fontWeight: 900 }}>Match list</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {updateMsg && <span style={{ color: '#4caf50', fontSize: 13, fontWeight: 700 }}>{updateMsg}</span>}
-                <button
-                  onClick={handleRefreshRooms}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#333', border: '1px solid #555', borderRadius: 6, color: 'white', fontSize: 13, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Nunito' }}
-                >
-                  <RefreshCw size={14} /> UPDATE
-                </button>
-              </div>
-            </div>
+            <h2 style={{ fontSize: 26, fontWeight: 900, marginBottom: 20 }}>Join with room code</h2>
+            <p style={{ fontSize: 13, color: '#aaa', marginBottom: 14, lineHeight: 1.6 }}>
+              Enter the room code shared by the host. Players can only join multiplayer rooms by code now.
+            </p>
             <input
-              style={{ ...inputStyle, marginBottom: 12 }}
-              placeholder="find a room..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              style={{ ...inputStyle, marginBottom: 12, fontSize: 18, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', textAlign: 'center' }}
+              placeholder="GOLF-1234"
+              value={joinRoomCode}
+              onChange={e => {
+                setJoinRoomCode(normalizeRoomCode(e.target.value));
+                setError('');
+              }}
+              onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
+              autoFocus
             />
-            <div style={{ border: '1px solid #444', borderRadius: 8, overflow: 'hidden', marginBottom: 20, maxHeight: 320, overflowY: 'auto' }}>
-              {loading ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: '#888', fontSize: 14 }}>
-                  Loading rooms...
-                </div>
-              ) : error ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: '#e53935', fontSize: 14 }}>
-                  {error}
-                </div>
-              ) : filteredRooms.length === 0 ? (
-                <div style={{ padding: '32px', textAlign: 'center', color: '#888', fontSize: 14 }}>
-                  No rooms available. Be the first to create one!
-                </div>
-              ) : (
-                filteredRooms.map((room, i) => {
-                  const isFull = room.current >= room.max;
-                  return (
-                    <div
-                      key={room.id}
-                      onClick={() => !isFull && handleRoomClick(room)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 16px',
-                        background: i % 2 === 0 ? '#222' : '#2a2a2a',
-                        cursor: isFull ? 'not-allowed' : 'pointer',
-                        opacity: isFull ? 0.5 : 1,
-                        borderBottom: i < filteredRooms.length - 1 ? '1px solid #333' : 'none',
-                        transition: 'background 0.15s',
-                      }}
-                      onMouseEnter={e => { if (!isFull) (e.currentTarget as HTMLDivElement).style.background = '#1565C0'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = i % 2 === 0 ? '#222' : '#2a2a2a'; }}
-                    >
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>{room.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 13, color: '#aaa' }}>{room.current}/{room.max}</span>
-                        {room.hasPassword
-                          ? <Lock size={16} color="#aaa" />
-                          : <LogIn size={16} color="#4caf50" />}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+            {error && (
+              <div style={{ marginBottom: 18, color: '#e53935', fontSize: 13, fontWeight: 700 }}>
+                {error}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={handleJoinByCode}
+                disabled={loading}
+                style={{ flex: 1, background: '#43A047', border: 'none', borderRadius: 8, color: 'white', fontWeight: 900, fontSize: 16, padding: '12px', cursor: loading ? 'default' : 'pointer', fontFamily: 'Nunito', opacity: loading ? 0.7 : 1 }}
+              >{loading ? 'JOINING...' : 'JOIN ROOM'}</button>
               <button
                 onClick={() => setStep('create-room')}
                 style={{ flex: 1, background: '#1565C0', border: 'none', borderRadius: 8, color: 'white', fontWeight: 900, fontSize: 16, padding: '12px', cursor: 'pointer', fontFamily: 'Nunito' }}
@@ -693,27 +640,6 @@ export default function ModeSelection() {
                 onClick={handleStartGame}
                 style={{ minWidth: 100, background: '#1565C0', border: '2px solid #1976D2' }}
               >START GAME</DarkBtn>
-            </div>
-          </Modal>
-        )}
-
-        {/* STEP 5: Room Password */}
-        {step === 'room-password' && (
-          <Modal onClose={closeModal}>
-            <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 24, textAlign: 'center' }}>Type Room Password</h2>
-            <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 8 }}>Type Room Password</label>
-            <input
-              style={{ ...inputStyle, marginBottom: 8 }}
-              type="password"
-              value={joinPassword}
-              onChange={e => { setJoinPassword(e.target.value); setJoinError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handlePasswordOk()}
-              autoFocus
-            />
-            {joinError && <p style={{ color: '#e53935', fontSize: 13, marginBottom: 8 }}>{joinError}</p>}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
-              <DarkBtn onClick={handlePasswordOk} style={{ minWidth: 100 }}>OK</DarkBtn>
-              <DarkBtn onClick={() => setStep('room-list')} style={{ minWidth: 100 }}>BACK</DarkBtn>
             </div>
           </Modal>
         )}

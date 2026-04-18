@@ -2500,11 +2500,11 @@ export default function Game() {
           <div style={{
             position: 'relative',
             background: isMyTurn
-              ? `linear-gradient(135deg, ${p1.color}20, ${p1.color}08)`
+              ? 'linear-gradient(135deg, rgba(88, 28, 135, 0.28), rgba(194, 65, 12, 0.14))'
               : 'rgba(255,255,255,0.04)',
-            border: isMyTurn ? `2px solid ${p1.color}80` : '2px solid rgba(255,255,255,0.08)',
+            border: isMyTurn ? '2px solid rgba(251, 191, 36, 0.88)' : '2px solid rgba(255,255,255,0.08)',
             borderRadius: 20, padding: '16px 24px',
-            boxShadow: isMyTurn ? `0 0 30px ${p1.color}30` : 'none',
+            boxShadow: isMyTurn ? '0 0 34px rgba(251, 191, 36, 0.24), inset 0 0 18px rgba(147, 51, 234, 0.12)' : 'none',
             transition: 'all 0.3s ease',
             animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
             ...getPlayerCardGlowStyle(0),
