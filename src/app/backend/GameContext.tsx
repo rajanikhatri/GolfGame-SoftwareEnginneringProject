@@ -863,7 +863,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     playersRef.current.forEach((player) => {
-      if (!player.isAI) return;
+      if (!player.isAI || player.hasKnocked) return;
 
       const delay = 300 + Math.random() * 1200;
 
@@ -874,6 +874,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const confidentMatches: Array<{ targetPlayerId: string; flatIndex: number; confidence: number }> = [];
 
         playersRef.current.forEach(target => {
+          if (target.hasKnocked) return;
           target.cards.forEach((row, ri) => {
             row.forEach((card, ci) => {
               if (!card) return;
@@ -1183,6 +1184,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const reactToDiscard = useCallback((targetPlayerId: string, row: number, col: number) => {
     const flatIndex = row * 2 + col;
+    const reactingPlayerId = myPlayerIdRef.current || playersRef.current[0]?.id;
+
+    if (!reactingPlayerId) return;
+    if (
+      knockedByRef.current &&
+      (reactingPlayerId === knockedByRef.current || targetPlayerId === knockedByRef.current)
+    ) {
+      return;
+    }
 
     if (gameMode === 'multiplayer') {
       if (!matchWindowActive) return;
@@ -1192,10 +1202,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     if (!matchWindowActive) return;
 
-    const me = playersRef.current[0];
-    if (!me) return;
-
-    const alreadySent = soloReactionsRef.current.some(r => r.playerId === me.id);
+    const alreadySent = soloReactionsRef.current.some(r => r.playerId === reactingPlayerId);
     if (alreadySent) return;
     const nextState = engineSubmitReaction(
       buildSoloEngineState({
@@ -1203,7 +1210,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         reactionWindowOpen: true,
         reactions: soloReactionsRef.current,
       }),
-      me.id,
+      reactingPlayerId,
       targetPlayerId,
       flatIndex,
       Date.now(),

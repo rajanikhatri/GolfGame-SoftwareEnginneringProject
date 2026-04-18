@@ -66,10 +66,6 @@ function leaderboardRef(uid: string) {
   return doc(leaderboardCol, uid);
 }
 
-function userProfileRef(uid: string) {
-  return doc(firebaseDb, 'users', uid);
-}
-
 export function normalizeRoomCode(code: string) {
   return String(code).toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16);
 }
@@ -283,23 +279,20 @@ export async function completeRoomMatch(code: string): Promise<void> {
       ).id;
 
       if (winnerId) {
-        const winnerProfileSnap = await tx.get(userProfileRef(winnerId));
-        if (winnerProfileSnap.exists()) {
-          const winnerRoomPlayer = room.players.find(player => player.id === winnerId);
-          const leaderboardSnap = await tx.get(leaderboardRef(winnerId));
-          const existing = leaderboardSnap.exists()
-            ? (leaderboardSnap.data() as LeaderboardEntry)
-            : null;
+        const winnerRoomPlayer = room.players.find(player => player.id === winnerId);
+        const leaderboardSnap = await tx.get(leaderboardRef(winnerId));
+        const existing = leaderboardSnap.exists()
+          ? (leaderboardSnap.data() as LeaderboardEntry)
+          : null;
 
-          tx.set(leaderboardRef(winnerId), {
-            uid: winnerId,
-            displayName: winnerRoomPlayer?.name ?? existing?.displayName ?? 'Player',
-            wins: (existing?.wins ?? 0) + 1,
-            avatar: winnerRoomPlayer?.avatar ?? existing?.avatar ?? '🎮',
-            color: winnerRoomPlayer?.color ?? existing?.color ?? '#1E88E5',
-            updatedAt: Date.now(),
-          } satisfies LeaderboardEntry);
-        }
+        tx.set(leaderboardRef(winnerId), {
+          uid: winnerId,
+          displayName: winnerRoomPlayer?.name ?? existing?.displayName ?? 'Player',
+          wins: (existing?.wins ?? 0) + 1,
+          avatar: winnerRoomPlayer?.avatar ?? existing?.avatar ?? '🎮',
+          color: winnerRoomPlayer?.color ?? existing?.color ?? '#1E88E5',
+          updatedAt: Date.now(),
+        } satisfies LeaderboardEntry);
       }
     }
 
