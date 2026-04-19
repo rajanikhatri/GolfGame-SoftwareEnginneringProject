@@ -57,6 +57,12 @@ export interface GameState {
   // UI-only: the opponent whose panel should glow on non-acting players' screens
   // while power 8/9/10 is in progress. Set by the acting player, read by everyone.
   powerFocusTargetId?: string | null;
+  // UI-only: the specific card being peeked during power 7 (own card) or power 8
+  // (opponent card). Set when the acting player taps the card, cleared on resolve.
+  peekRevealCard?: { playerId: string; cardIndex: number } | null;
+  // UI-only: the most-recently selected card during power 9/10 selection phase.
+  // Updated on every pick so all clients can anchor the hand cue to the correct card.
+  powerCueCard?: { playerId: string; cardIndex: number } | null;
 
   pendingGiveaway: {
     giverId: string;
@@ -137,6 +143,8 @@ export function createInitialGameState(playerIds: string[]): GameState {
     scores: {},
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -275,6 +283,8 @@ function drawOnePenaltyCard(
       scores: {},
       power9Selection: null,
       powerFocusTargetId: null,
+      peekRevealCard: null,
+      powerCueCard: null,
       pendingGiveaway: null,
     } as GameState);
 
@@ -315,6 +325,8 @@ export function advanceTurn(state: GameState): GameState {
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -419,7 +431,7 @@ export function takeFromDiscard(state: GameState, playerId: string): GameState {
 export function skipPower(state: GameState, playerId: string): GameState {
   if (state.phase !== 'power') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null };
+  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null, peekRevealCard: null, powerCueCard: null };
 }
 
 function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
@@ -439,6 +451,8 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
   };
 }
 
@@ -631,6 +645,15 @@ export function discardDrawnCard(state: GameState, playerId: string): GameState 
 
 // ─── Phase: React ─────────────────────────────────────────────────────────────
 
+function isReactionBlockedByKnock(
+  state: GameState,
+  reactingPlayerId: string,
+  targetPlayerId: string,
+): boolean {
+  if (!state.knockedById) return false;
+  return reactingPlayerId === state.knockedById || targetPlayerId === state.knockedById;
+}
+
 // A player submits a reaction (they claim to have a matching card)
 export function submitReaction(
   state: GameState,
@@ -641,6 +664,7 @@ export function submitReaction(
 ): GameState {
   if (!state.reactionWindowOpen) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
+  if (isReactionBlockedByKnock(state, reactingPlayerId, targetPlayerId)) return state;
 
   return {
     ...state,
@@ -660,7 +684,9 @@ export function resolveReactionWindow(state: GameState): GameState {
   }
 
   const discardedValue = state.lastDiscardedCard.value;
-  const sorted = [...state.reactions].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...state.reactions]
+    .filter(reaction => !isReactionBlockedByKnock(state, reaction.playerId, reaction.targetPlayerId))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   const winningReaction =
     sorted.find(reaction => {
@@ -813,6 +839,8 @@ export function knock(state: GameState, playerId: string): GameState {
     reactions: [],
     power9Selection: null,
     powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
   };
 
   // Knocking uses up the current player's turn immediately.

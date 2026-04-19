@@ -253,29 +253,33 @@ export default function Lobby() {
           BACK
         </button>
 
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
-            ROOM CODE
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            <div className="room-code-badge px-5 py-2">
-              <span style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'Nunito', letterSpacing: '0.15em' }}>
-                {ROOM_CODE}
-              </span>
-            </div>
-            <button
-              onClick={handleCopy}
-              style={{
-                background: copied ? 'rgba(67,160,71,0.3)' : 'rgba(255,255,255,0.1)',
-                border: '2px solid rgba(255,255,255,0.2)',
-                borderRadius: 10, padding: '8px 12px',
-                color: 'white', cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              {copied ? <Check size={18} color="#4CAF50" /> : <Copy size={18} />}
-            </button>
-          </div>
+        <div style={{ textAlign: 'center', minWidth: gameMode === 'solo' ? 0 : 220 }}>
+          {gameMode !== 'solo' && (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
+                ROOM CODE
+              </div>
+              <div className="flex items-center gap-3 mt-1">
+                <div className="room-code-badge px-5 py-2">
+                  <span style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'Nunito', letterSpacing: '0.15em' }}>
+                    {ROOM_CODE}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopy}
+                  style={{
+                    background: copied ? 'rgba(67,160,71,0.3)' : 'rgba(255,255,255,0.1)',
+                    border: '2px solid rgba(255,255,255,0.2)',
+                    borderRadius: 10, padding: '8px 12px',
+                    color: 'white', cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {copied ? <Check size={18} color="#4CAF50" /> : <Copy size={18} />}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{
@@ -466,91 +470,93 @@ export default function Lobby() {
         </div>
 
         {/* Right: Chat */}
-        <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.4)',
-            fontFamily: 'Nunito', letterSpacing: '0.2em',
-          }}>
-            💬 GAME CHAT
-          </div>
+        {gameMode !== 'solo' && (
+          <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{
+              fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.4)',
+              fontFamily: 'Nunito', letterSpacing: '0.2em',
+            }}>
+              💬 GAME CHAT
+            </div>
 
-          <div style={{
-            flex: 1,
-            background: 'rgba(0,0,0,0.25)',
-            border: '2px solid rgba(255,255,255,0.1)',
-            borderRadius: 20,
-            padding: '16px',
-            display: 'flex', flexDirection: 'column',
-            gap: 10,
-            overflowY: 'auto',
-            maxHeight: 'calc(100vh - 320px)',
-            minHeight: 300,
-          }}>
-            <AnimatePresence>
-              {chatMessages.map(msg => {
-                const isYou = msg.playerId === 'p1';
-                const playerColor = INITIAL_PLAYERS.find(p => p.id === msg.playerId)?.color || '#1E88E5';
-                return (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    className={`flex flex-col ${isYou ? 'items-end' : 'items-start'}`}
-                  >
-                    {!isYou && (
-                      <span style={{
-                        fontSize: 11, fontWeight: 800,
-                        color: playerColor,
-                        fontFamily: 'Nunito',
-                        marginBottom: 3,
-                        paddingLeft: 4,
-                      }}>{msg.playerName}</span>
-                    )}
-                    <div
-                      className={isYou ? 'chat-bubble-self' : 'chat-bubble-other'}
-                      style={{
-                        padding: '8px 14px',
-                        fontSize: 13, fontWeight: 600,
-                        color: 'white', fontFamily: 'Nunito',
-                        maxWidth: '85%',
-                      }}
+            <div style={{
+              flex: 1,
+              background: 'rgba(0,0,0,0.25)',
+              border: '2px solid rgba(255,255,255,0.1)',
+              borderRadius: 20,
+              padding: '16px',
+              display: 'flex', flexDirection: 'column',
+              gap: 10,
+              overflowY: 'auto',
+              maxHeight: 'calc(100vh - 320px)',
+              minHeight: 300,
+            }}>
+              <AnimatePresence>
+                {chatMessages.map(msg => {
+                  const isYou = msg.playerId === 'p1';
+                  const playerColor = INITIAL_PLAYERS.find(p => p.id === msg.playerId)?.color || '#1E88E5';
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className={`flex flex-col ${isYou ? 'items-end' : 'items-start'}`}
                     >
-                      {msg.message}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-            <div ref={chatEndRef} />
-          </div>
+                      {!isYou && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 800,
+                          color: playerColor,
+                          fontFamily: 'Nunito',
+                          marginBottom: 3,
+                          paddingLeft: 4,
+                        }}>{msg.playerName}</span>
+                      )}
+                      <div
+                        className={isYou ? 'chat-bubble-self' : 'chat-bubble-other'}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: 13, fontWeight: 600,
+                          color: 'white', fontFamily: 'Nunito',
+                          maxWidth: '85%',
+                        }}
+                      >
+                        {msg.message}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+              <div ref={chatEndRef} />
+            </div>
 
-          {/* Chat input */}
-          <div className="flex gap-2">
-            <input
-              value={inputMsg}
-              onChange={e => setInputMsg(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="Say something..."
-              style={{
-                flex: 1,
-                background: 'rgba(255,255,255,0.08)',
-                border: '2px solid rgba(255,255,255,0.15)',
-                borderRadius: 50,
-                padding: '10px 18px',
-                color: 'white',
-                fontSize: 14, fontFamily: 'Nunito', fontWeight: 600,
-                outline: 'none',
-              }}
-            />
-            <button
-              onClick={handleSend}
-              className="arcade-btn arcade-btn-blue"
-              style={{ width: 46, height: 46, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}
-            >
-              <Send size={18} />
-            </button>
+            {/* Chat input */}
+            <div className="flex gap-2">
+              <input
+                value={inputMsg}
+                onChange={e => setInputMsg(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder="Say something..."
+                style={{
+                  flex: 1,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '2px solid rgba(255,255,255,0.15)',
+                  borderRadius: 50,
+                  padding: '10px 18px',
+                  color: 'white',
+                  fontSize: 14, fontFamily: 'Nunito', fontWeight: 600,
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSend}
+                className="arcade-btn arcade-btn-blue"
+                style={{ width: 46, height: 46, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}
+              >
+                <Send size={18} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

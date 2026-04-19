@@ -21,6 +21,8 @@ import {
   syncRemovePlayer,
   syncGiveAwayCard,
   syncSetPowerFocusTarget,
+  syncSetPeekRevealCard,
+  syncSetPowerCueCard,
 } from '../database/firebaseGameSync';
 import {
   createInitialGameState,
@@ -41,6 +43,7 @@ import {
   getCardValue,
   type GameState,
   type GamePhase as EnginePhase,
+  type ReactionEntry,
 } from './gameEngine';
 
 type PerfGlobal = typeof globalThis & {
@@ -144,11 +147,16 @@ interface GameContextType {
   winner: Player | null;
   chatMessages: ChatMessage[];
   lastPlayedCard: Card | null;
+  reactionEntries: ReactionEntry[];
   pendingPower: '7' | '8' | '9' | '10' | null;
   power9Selection: { playerId: string; cardIndex: number }[] | null;
   powerFocusTargetId: string | null;
+  peekRevealCard: { playerId: string; cardIndex: number } | null;
+  powerCueCard: { playerId: string; cardIndex: number } | null;
   giveawayGiverId: string | null;
   setFocusTarget: (targetPlayerId: string | null) => void;
+  setPeekRevealCard: (card: { playerId: string; cardIndex: number } | null) => void;
+  setPowerCueCard: (card: { playerId: string; cardIndex: number } | null) => void;
   // Called from Lobby when game is about to start (multiplayer).
   // Host passes roomPlayerIds to create the deck in Firestore; joiners omit it.
   initMultiplayer: (
@@ -423,9 +431,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [winner,             setWinner]             = useState<Player | null>(null);
   const [chatMessages,       setChatMessages]       = useState<ChatMessage[]>(LOBBY_MESSAGES);
   const [lastPlayedCard,     setLastPlayedCard]     = useState<Card | null>(null);
+  const [reactionEntries,    setReactionEntries]    = useState<ReactionEntry[]>([]);
   const [pendingPower,          setPendingPower]          = useState<'7' | '8' | '9' | '10' | null>(null);
   const [power9Selection,       setPower9Selection]       = useState<{ playerId: string; cardIndex: number }[] | null>(null);
   const [powerFocusTargetId,    setPowerFocusTargetId]    = useState<string | null>(null);
+  const [peekRevealCard,        setPeekRevealCardState]    = useState<{ playerId: string; cardIndex: number } | null>(null);
+  const [powerCueCard,          setPowerCueCardState]       = useState<{ playerId: string; cardIndex: number } | null>(null);
   const [giveawayGiverId,       setGiveawayGiverId]       = useState<string | null>(null);
   const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string | null>(null);
   const [swapCountdown,         setSwapCountdown]         = useState<number | null>(null);
@@ -621,9 +632,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setFinalRound(state.finalRound);
     setKnockedBy(state.knockedById);
     setMatchWindowActive(state.reactionWindowOpen);
+    setReactionEntries((state.reactions as ReactionEntry[]) ?? []);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
     setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
     setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
+    setPeekRevealCardState((state.peekRevealCard as { playerId: string; cardIndex: number } | null) ?? null);
+    setPowerCueCardState((state.powerCueCard as { playerId: string; cardIndex: number } | null) ?? null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
 
@@ -853,7 +867,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     playersRef.current.forEach((player) => {
-      if (!player.isAI) return;
+      if (!player.isAI || player.hasKnocked) return;
 
       const delay = 300 + Math.random() * 1200;
 
@@ -864,6 +878,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const confidentMatches: Array<{ targetPlayerId: string; flatIndex: number; confidence: number }> = [];
 
         playersRef.current.forEach(target => {
+          if (target.hasKnocked) return;
           target.cards.forEach((row, ri) => {
             row.forEach((card, ci) => {
               if (!card) return;
@@ -895,15 +910,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (confidentMatches.length === 0) return;
 
         confidentMatches.sort((a, b) => b.confidence - a.confidence);
-        const pick = confidentMatches[0];
+      const pick = confidentMatches[0];
 
-        soloReactionsRef.current.push({
-          playerId: player.id,
-          targetPlayerId: pick.targetPlayerId,
-          cardIndex: pick.flatIndex,
-          timestamp: Date.now(),
-        });
-      }, delay);
+      soloReactionsRef.current.push({
+        playerId: player.id,
+        targetPlayerId: pick.targetPlayerId,
+        cardIndex: pick.flatIndex,
+        timestamp: Date.now(),
+      });
+      setReactionEntries([...soloReactionsRef.current]);
+    }, delay);
 
       timers.push(t);
     });
@@ -929,6 +945,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }));
     const state = createInitialGameState(configs.map(cfg => cfg.id));
     aiMemoryRef.current = {};
+    setReactionEntries([]);
     seedSoloAIMemory(state);
     applySoloEngineState(state, profiles);
     setAiThinking(false);
@@ -951,7 +968,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
     setPlayers(newPlayers); setDrawPile(state.drawPile); setDiscardPile(state.discardPile);
     setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
-    setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
+    setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false); setReactionEntries([]);
     setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setGiveawayGiverId(null);
   }, []);
 
@@ -1088,6 +1105,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setFinalRound(state.finalRound);
     setKnockedBy(state.knockedById);
     setMatchWindowActive(state.reactionWindowOpen);
+    setReactionEntries((state.reactions as ReactionEntry[]) ?? []);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
@@ -1173,6 +1191,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const reactToDiscard = useCallback((targetPlayerId: string, row: number, col: number) => {
     const flatIndex = row * 2 + col;
+    const reactingPlayerId = myPlayerIdRef.current || playersRef.current[0]?.id;
+
+    if (!reactingPlayerId) return;
+    if (
+      knockedByRef.current &&
+      (reactingPlayerId === knockedByRef.current || targetPlayerId === knockedByRef.current)
+    ) {
+      return;
+    }
 
     if (gameMode === 'multiplayer') {
       if (!matchWindowActive) return;
@@ -1182,10 +1209,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     if (!matchWindowActive) return;
 
-    const me = playersRef.current[0];
-    if (!me) return;
-
-    const alreadySent = soloReactionsRef.current.some(r => r.playerId === me.id);
+    const alreadySent = soloReactionsRef.current.some(r => r.playerId === reactingPlayerId);
     if (alreadySent) return;
     const nextState = engineSubmitReaction(
       buildSoloEngineState({
@@ -1193,12 +1217,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         reactionWindowOpen: true,
         reactions: soloReactionsRef.current,
       }),
-      me.id,
+      reactingPlayerId,
       targetPlayerId,
       flatIndex,
       Date.now(),
     );
     soloReactionsRef.current = nextState.reactions;
+    setReactionEntries([...nextState.reactions]);
   }, [gameMode, matchWindowActive]);
 
   const completeSoloGiveaway = useCallback((row: number, col: number) => {
@@ -1302,6 +1327,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [gameMode]);
 
+  const setPeekRevealCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPeekRevealCard(roomCodeRef.current, card).catch(console.error);
+    }
+  }, [gameMode]);
+
+  const setPowerCueCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
+    if (gameMode === 'multiplayer') {
+      syncSetPowerCueCard(roomCodeRef.current, card).catch(console.error);
+    }
+  }, [gameMode]);
+
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
     if (gameMode === 'multiplayer') {
       if (selections.length < 2) return;
@@ -1400,6 +1437,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setDrawPile([]); setDiscardPile([]);
     setCurrentPlayerIndex(0); setCurrentTurnPlayerId(null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
+    setReactionEntries([]);
     setAiThinking(false); setWinner(null);
     setChatMessages(LOBBY_MESSAGES);
   }, []);
@@ -1415,9 +1453,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       currentPlayerIndex, drawnCard, phase,
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
-      aiThinking, winner, chatMessages, lastPlayedCard,
-      pendingPower, power9Selection, powerFocusTargetId, giveawayGiverId,
+      aiThinking, winner, chatMessages, lastPlayedCard, reactionEntries,
+      pendingPower, power9Selection, powerFocusTargetId, peekRevealCard, powerCueCard, giveawayGiverId,
       setFocusTarget: setFocusTargetAction,
+      setPeekRevealCard: setPeekRevealCardAction,
+      setPowerCueCard: setPowerCueCardAction,
       swapCountdown,
       disconnectedPlayerName,
       initMultiplayer,

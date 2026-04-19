@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInAnonymously,
   signInWithEmailAndPassword,
   signOut,
@@ -125,6 +126,10 @@ export async function loginWithEmail(email: string, password: string) {
   const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
   const profile = await upsertUserProfile(cred.user);
   return { user: cred.user, profile };
+}
+
+export async function sendPasswordReset(email: string) {
+  await sendPasswordResetEmail(firebaseAuth, email);
 }
 
 export async function logoutFirebaseUser() {

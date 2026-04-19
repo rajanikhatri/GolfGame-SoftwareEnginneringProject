@@ -564,6 +564,47 @@ type PerfGlobal = typeof globalThis & {
 const EMPTY_GRID_SELECTIONS: GridSelection[] = [];
 const EMPTY_ORDERED_GRID_SELECTIONS: OrderedGridSelection[] = [];
 
+function formatOrdinal(value: number) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}TH`;
+
+  switch (value % 10) {
+    case 1:
+      return `${value}ST`;
+    case 2:
+      return `${value}ND`;
+    case 3:
+      return `${value}RD`;
+    default:
+      return `${value}TH`;
+  }
+}
+
+function getReactionOrderLabel(order: number) {
+  return `${formatOrdinal(order)} REACTOR`;
+}
+
+function getReactionBadgeColors(order: number) {
+  if (order === 1) {
+    return {
+      background: '#43A047',
+      boxShadow: '0 4px 12px rgba(67,160,71,0.55)',
+    };
+  }
+
+  if (order === 2) {
+    return {
+      background: '#FB8C00',
+      boxShadow: '0 4px 12px rgba(251,140,0,0.48)',
+    };
+  }
+
+  return {
+    background: '#546E7A',
+    boxShadow: '0 4px 12px rgba(84,110,122,0.42)',
+  };
+}
+
 function isPerfDebugEnabled() {
   if (!import.meta.env.DEV) return false;
 
@@ -618,7 +659,7 @@ type RegisterCardNode = (
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
-  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, onPowerClick, peekPhase, reactionSelectable, onReactionClick, reactionSelected, registerCardNode,
+  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, onPowerClick, peekPhase, reactionSelectable, onReactionClick, reactionSelected, reactionOrder, registerCardNode, peekHighlightCards,
 }: {
   player: Player;
   isActive: boolean;
@@ -637,7 +678,11 @@ function PlayerCardGrid({
   reactionSelectable?: boolean;
   onReactionClick?: (playerId: string, row: number, col: number) => void;
   reactionSelected?: { playerId: string; row: number; col: number } | null;
+  reactionOrder?: number | null;
   registerCardNode?: RegisterCardNode;
+  /** Positions where the acting player is currently peeking — shown as a glow
+   *  to observers WITHOUT flipping the card face-up (value stays hidden). */
+  peekHighlightCards?: GridSelection[];
 }) {
   debugPerf(`PlayerCardGrid render:${player.id}`, {
     isActive,
@@ -672,6 +717,7 @@ function PlayerCardGrid({
             const isPowerSelected = powerSelectionOrder !== null;
             const isPowerConfirm = Boolean(powerConfirmCards?.some(selection => selection.row === ri && selection.col === ci));
             const isPowerSwapGlow = Boolean(displayCard?.id && powerSwapGlowCardIds?.includes(displayCard.id));
+            const isPeekHighlight = Boolean(peekHighlightCards?.some(s => s.row === ri && s.col === ci));
             const isReactionSelected =
               reactionSelected?.playerId === player.id &&
               reactionSelected?.row === ri &&
@@ -684,11 +730,13 @@ function PlayerCardGrid({
               !isPowerSelected &&
               !isPowerConfirm &&
               !isPeeked &&
+              !isPeekHighlight &&
               !isReactionTarget &&
               !isReactionSelected
             );
             const isInteractive = Boolean((isYou && selectedForSwap && card) || isPowerTarget || isReactionTarget);
             const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
+            const reactionBadgeColors = reactionOrder ? getReactionBadgeColors(reactionOrder) : null;
 
             const handleClick = () => {
               if (isPowerTarget && onPowerClick) {
@@ -708,17 +756,18 @@ function PlayerCardGrid({
                 animate={isPowerConfirm
                   ? {
                       opacity: shouldDimForPower ? 0.36 : 1,
-                      y: [0, -8, -2, 0],
-                      scale: [1, 1.08, 1.03, 1],
+                      y: [0, -14, -4, 0],
+                      scale: [1, 1.18, 1.10, 1],
                     }
                   : {
                       opacity: shouldDimForPower ? 0.36 : 1,
-                      y: isPowerSelected ? -6 : isPowerTarget ? -4 : 0,
-                      scale: isPowerSelected ? 1.05 : isPowerTarget ? 1.025 : 1,
+                      y: isPowerSelected ? -8 : isPowerTarget ? -5 : isPeeked ? -8 : isReactionSelected ? -6 : 0,
+                      scale: isPowerSelected ? 1.14 : isPowerTarget ? 1.07 : isPeeked ? 1.14 : isReactionSelected ? 1.12 : 1,
                     }}
+                whileTap={isInteractive ? { scale: 0.90 } : undefined}
                 transition={isPowerConfirm
-                  ? { duration: 0.72, times: [0, 0.42, 0.72, 1], ease: 'easeOut' }
-                  : { type: 'spring', stiffness: 280, damping: 24, opacity: { duration: 0.18 } }}
+                  ? { duration: 0.85, times: [0, 0.35, 0.68, 1], ease: 'easeOut' }
+                  : { type: 'spring', stiffness: 420, damping: 16, opacity: { duration: 0.18 } }}
                 style={{
                   position: 'relative',
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,
@@ -735,6 +784,20 @@ function PlayerCardGrid({
                       background: 'radial-gradient(circle, rgba(239,83,80,0.22) 0%, rgba(239,83,80,0.12) 42%, transparent 72%)',
                       boxShadow: 'inset 0 0 0 2px rgba(255,138,128,0.78), 0 0 18px rgba(239,83,80,0.42), 0 0 34px rgba(183,28,28,0.24)',
                       animation: 'power-swap-red-glow 7s ease-out forwards',
+                    }}
+                  />
+                )}
+                {isPeekHighlight && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: -4,
+                      borderRadius: isYou ? 16 : 13,
+                      pointerEvents: 'none',
+                      zIndex: 2,
+                      border: '2px solid rgba(180, 100, 255, 0.88)',
+                      boxShadow: '0 0 0 3px rgba(160,80,255,0.32), 0 0 18px rgba(160,80,255,0.55)',
+                      background: 'radial-gradient(circle, rgba(160,80,255,0.12) 0%, transparent 68%)',
                     }}
                   />
                 )}
@@ -755,26 +818,23 @@ function PlayerCardGrid({
                   style={
                     isPowerSelected && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 26px ${powerAccent.glow}`,
-                          transform: 'translateY(-2px) scale(1.04)',
+                          boxShadow: `0 0 0 4px ${powerAccent.outline}, 0 0 32px ${powerAccent.glow}`,
                         }
                       : isPowerTarget && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 24px ${powerAccent.glow}`,
-                          transform: 'translateY(-1px) scale(1.02)',
+                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 28px ${powerAccent.glow}`,
                           animation: 'pulse-glow 1s ease-in-out infinite',
                         }
                       : isPowerConfirm && powerAccent
                       ? {
-                          boxShadow: `0 0 0 3px ${powerAccent.outline}, 0 0 28px ${powerAccent.glow}`,
-                          transform: 'scale(1.03)',
+                          boxShadow: `0 0 0 4px ${powerAccent.outline}, 0 0 36px ${powerAccent.glow}`,
                         }
                       : isReactionSelected
-                      ? { boxShadow: '0 0 0 3px #66BB6A, 0 0 24px rgba(102,187,106,0.95)', transform: 'scale(1.04)' }
+                      ? { boxShadow: '0 0 0 4px #66BB6A, 0 0 32px rgba(102,187,106,0.95)' }
                       : isReactionTarget
-                      ? { boxShadow: '0 0 0 3px #FFB300, 0 0 22px rgba(255,179,0,0.85)', animation: 'pulse-glow 0.8s infinite' }
+                      ? { boxShadow: '0 0 0 3px #FFB300, 0 0 26px rgba(255,179,0,0.85)', animation: 'pulse-glow 0.8s infinite' }
                       : isPeeked
-                      ? { boxShadow: '0 0 0 3px #42A5F5, 0 0 24px rgba(66,165,245,0.9)', transform: 'scale(1.06)' }
+                      ? { boxShadow: '0 0 0 4px #42A5F5, 0 0 32px rgba(66,165,245,0.9)' }
                       : undefined
                   }
                 />
@@ -824,7 +884,7 @@ function PlayerCardGrid({
                     position: 'absolute',
                     top: -8,
                     right: -6,
-                    background: '#66BB6A',
+                    background: reactionBadgeColors?.background ?? '#66BB6A',
                     borderRadius: 999,
                     padding: '2px 8px',
                     fontSize: 9,
@@ -832,10 +892,10 @@ function PlayerCardGrid({
                     color: 'white',
                     fontFamily: 'Nunito',
                     zIndex: 7,
-                    boxShadow: '0 2px 8px rgba(102,187,106,0.6)',
+                    boxShadow: reactionBadgeColors?.boxShadow ?? '0 2px 8px rgba(102,187,106,0.6)',
                     whiteSpace: 'nowrap',
                   }}>
-                    SENT
+                    {reactionOrder ? getReactionOrderLabel(reactionOrder) : 'REACTION SENT'}
                   </div>
                 )}
                 {isPowerConfirm && powerAccent && (
@@ -898,7 +958,7 @@ function PlayerCardGrid({
 // ─── Player Panel ─────────────────────────────────────────────────────────────
 function PlayerPanelComp({
   player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking, score,
-  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, discardLandingCue, registerCardNode, cardAreaGlowStyle,
+  revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, reactionOrder, discardLandingCue, registerCardNode, cardAreaGlowStyle, peekHighlightCards,
 }: {
   player: Player;
   isActive: boolean;
@@ -920,9 +980,11 @@ function PlayerPanelComp({
   reactionSelectable?: boolean;
   onReactionClick?: (playerId: string, row: number, col: number) => void;
   reactionSelected?: { playerId: string; row: number; col: number } | null;
+  reactionOrder?: number | null;
   discardLandingCue?: boolean;
   registerCardNode?: RegisterCardNode;
   cardAreaGlowStyle?: CSSProperties;
+  peekHighlightCards?: GridSelection[];
 }) {
   const isHorizontal = position === 'top' || position === 'bottom';
   const hasPowerTargets = Boolean(powerSelectableCards && powerSelectableCards.length > 0);
@@ -931,6 +993,7 @@ function PlayerPanelComp({
   const shouldDimForPower = Boolean(powerModeActive && !hasPowerTargets && !hasPowerSelections && !hasPowerConfirmCards);
   const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
   const showInstructionalPanelCue = Boolean(isYou && powerModeActive && powerGuideText && powerTone);
+  const reactionBadgeColors = reactionOrder ? getReactionBadgeColors(reactionOrder) : null;
 
   debugPerf(`PlayerPanel render:${player.id}`, {
     position,
@@ -997,6 +1060,22 @@ function PlayerPanelComp({
               {isYou ? score : '?'}
             </span>
           </div>
+          {reactionOrder && (
+            <div style={{
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: reactionBadgeColors?.background ?? '#66BB6A',
+              color: 'white',
+              fontSize: 10,
+              fontWeight: 900,
+              fontFamily: 'Nunito',
+              letterSpacing: '0.05em',
+              boxShadow: reactionBadgeColors?.boxShadow ?? '0 4px 12px rgba(102,187,106,0.6)',
+              whiteSpace: 'nowrap',
+            }}>
+              {getReactionOrderLabel(reactionOrder)}
+            </div>
+          )}
         </div>
 
         {isActive && player.isAI && aiThinking && <AIThinkingDots />}
@@ -1049,7 +1128,9 @@ function PlayerPanelComp({
           reactionSelectable={reactionSelectable}
           onReactionClick={onReactionClick}
           reactionSelected={reactionSelected}
+          reactionOrder={reactionOrder}
           registerCardNode={registerCardNode}
+          peekHighlightCards={peekHighlightCards}
         />
       </div>
     </div>
@@ -1277,9 +1358,12 @@ export default function Game() {
     drawnCard, phase, finalRound, knockedBy,
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, reactToDiscard, knock,
+    reactionEntries,
     initGame, pendingPower, resolvePower, skipPower, disconnectedPlayerName, swapCountdown, endPeek,
     selectPower9Card, confirmPower9, usePower10, giveawayGiverId,
     powerFocusTargetId, setFocusTarget,
+    peekRevealCard, setPeekRevealCard,
+    powerCueCard, setPowerCueCard,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -1292,6 +1376,24 @@ export default function Game() {
   const swapMode = phase === 'swap' && isMyTurn;
   const canGiveAway = phase === 'giveaway' && giveawayGiverId === p1?.id;
   const giveawayGiverName = players.find(player => player.id === giveawayGiverId)?.name ?? 'Someone';
+  const reactionMode = matchWindowActive;
+  const canReactThisWindow = reactionMode && knockedBy !== myPlayerId;
+  const canReactToPlayer = (playerId?: string) => Boolean(
+    canReactThisWindow &&
+    playerId &&
+    playerId !== knockedBy
+  );
+  const sortedReactionEntries = [...reactionEntries].sort((a, b) => a.timestamp - b.timestamp);
+  const reactionOrderByPlayerId = new Map<string, number>();
+  sortedReactionEntries.forEach((reaction, index) => {
+    if (!reactionOrderByPlayerId.has(reaction.playerId)) {
+      reactionOrderByPlayerId.set(reaction.playerId, index + 1);
+    }
+  });
+  const getPlayerReactionOrder = (playerId?: string) => (
+    playerId ? (reactionOrderByPlayerId.get(playerId) ?? null) : null
+  );
+  const localReactionOrder = getPlayerReactionOrder(myPlayerId || p1?.id);
 
   useEffect(() => {
     if (!peekActive) return;
@@ -1449,7 +1551,7 @@ export default function Game() {
     currentPlayerIndex === 0 &&
     players[0]?.id === myPlayerId &&
     (pendingPower === '9' || pendingPower === '10') &&
-    powerSelections.length < 2 &&
+    powerSelections.length >= 1 &&
     !powerSwapAnimation;
 
   useEffect(() => {
@@ -1465,11 +1567,8 @@ export default function Game() {
   }, [powerSwapAnimation]);
 
   useLayoutEffect(() => {
-    // Pick-1 state (length 0): show cue at local player's first card as a "tap here" hint.
-    // Pick-2 state (length 1): show cue at the already-selected card.
-    const selectedSwapCard = selectedSwapCueActive
-      ? (powerSelections[0] ?? (players[0] ? { playerId: players[0].id, row: 0, col: 0 } : null))
-      : null;
+    // Cue points at the most recently selected card (first or second pick).
+    const selectedSwapCard = selectedSwapCueActive ? (powerSelections[powerSelections.length - 1] ?? null) : null;
 
     if (!selectedSwapCard) {
       setSelectedPowerCueAnchor(null);
@@ -1497,28 +1596,26 @@ export default function Game() {
     selectedSwapCueActive,
     powerSelections,
     measureCardAnchor,
-    players,
   ]);
 
-  // True on any non-acting screen while power 9/10 is choosing targets
+  // True on non-acting screens whenever the acting player has selected a card
+  // (powerCueCard set), so the cue is anchored to the exact selected card.
   const opponentSwapCueActive =
     phase === 'power' &&
     !isMyTurn &&
     (pendingPower === '9' || pendingPower === '10') &&
+    powerCueCard !== null &&
     !powerSwapAnimation;
 
   useLayoutEffect(() => {
-    if (!opponentSwapCueActive) {
+    if (!opponentSwapCueActive || !powerCueCard) {
       setOpponentSwapCueAnchor(null);
       return;
     }
-    const actingPlayer = players[currentPlayerIndex];
-    if (!actingPlayer) {
-      setOpponentSwapCueAnchor(null);
-      return;
-    }
+    const row = Math.floor(powerCueCard.cardIndex / 2);
+    const col = powerCueCard.cardIndex % 2;
     const updateAnchor = () => {
-      setOpponentSwapCueAnchor(measureCardAnchor(actingPlayer.id, 0, 0));
+      setOpponentSwapCueAnchor(measureCardAnchor(powerCueCard.playerId, row, col));
     };
     const frame = window.requestAnimationFrame(updateAnchor);
     window.addEventListener('resize', updateAnchor);
@@ -1526,7 +1623,7 @@ export default function Game() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', updateAnchor);
     };
-  }, [opponentSwapCueActive, players, currentPlayerIndex, measureCardAnchor]);
+  }, [opponentSwapCueActive, powerCueCard, measureCardAnchor]);
 
   useEffect(() => {
     const previousPlayers = prevPlayersRef.current;
@@ -1687,7 +1784,7 @@ export default function Game() {
         setPowerConfirmCards([]);
       }
     } else if (gameMode === 'solo') {
-      setSwapCueCards([]);
+      setPowerConfirmCards([]);
     }
 
     prevPlayersRef.current = players;
@@ -1716,24 +1813,34 @@ export default function Game() {
   }, [phase, isMyTurn, canGiveAway, swapCard, giveAwayCardAction]);
 
   const handleReactionCardClick = useCallback((targetPlayerId: string, row: number, col: number) => {
-    if (matchWindowActive) {
-      setSubmittedReactionCard({ playerId: targetPlayerId, row, col });
-      reactToDiscard(targetPlayerId, row, col);
-    }
-  }, [matchWindowActive, reactToDiscard]);
+    if (!matchWindowActive) return;
+    if (myPlayerId === knockedBy || targetPlayerId === knockedBy) return;
+
+    setSubmittedReactionCard({ playerId: targetPlayerId, row, col });
+    reactToDiscard(targetPlayerId, row, col);
+  }, [matchWindowActive, myPlayerId, knockedBy, reactToDiscard]);
 
   const isSamePowerSelection = useCallback((a: PowerSelection, b: PowerSelection) => {
     return a.playerId === b.playerId && a.cardFlatIndex === b.cardFlatIndex;
   }, []);
 
+  // Only the acting player sees cards face-up; value is never exposed to other players.
   const buildRevealCards = useCallback((playerIndex: number): GridSelection[] => {
     if (peekedCards.length === 0) return EMPTY_GRID_SELECTIONS;
-
     const nextRevealCards = peekedCards
       .filter(card => card.playerIndex === playerIndex)
       .map(card => ({ row: card.row, col: card.col }));
     return nextRevealCards.length > 0 ? nextRevealCards : EMPTY_GRID_SELECTIONS;
   }, [peekedCards]);
+
+  // Non-acting players see only a highlight (glow) on the peeked card — card stays face-down.
+  const buildPeekHighlightCards = useCallback((playerIndex: number): GridSelection[] => {
+    // The acting player's screen shows the full reveal via buildRevealCards instead.
+    if (currentPlayerIndex === 0) return EMPTY_GRID_SELECTIONS;
+    if (!peekRevealCard) return EMPTY_GRID_SELECTIONS;
+    if (players[playerIndex]?.id !== peekRevealCard.playerId) return EMPTY_GRID_SELECTIONS;
+    return [{ row: Math.floor(peekRevealCard.cardIndex / 2), col: peekRevealCard.cardIndex % 2 }];
+  }, [currentPlayerIndex, peekRevealCard, players]);
 
   const buildSelectedPowerCards = useCallback((playerIndex: number): OrderedGridSelection[] => {
     if (powerSelections.length === 0) return EMPTY_ORDERED_GRID_SELECTIONS;
@@ -1793,11 +1900,12 @@ export default function Game() {
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
     setSelectedPowerCueAnchor(null);
+    setPowerCueCard(null);
     confirmPower9(doSwap, powerSelections.map(selection => ({
       playerId: selection.playerId,
       cardFlatIndex: selection.cardFlatIndex,
     })));
-  }, [confirmPower9, powerSelections]);
+  }, [confirmPower9, powerSelections, setPowerCueCard]);
 
   // Called when player taps a card during power phase
   const handlePowerCardClick = useCallback((playerIndex: number, row: number, col: number) => {
@@ -1820,6 +1928,8 @@ export default function Game() {
         setFocusTarget(targetPlayerId);
       }
 
+      // Share which card is being peeked so all players can see the reveal.
+      setPeekRevealCard({ playerId: targetPlayerId, cardIndex: flatIndex });
       setPeekedCards([{ playerIndex, row, col }]);
       peekTimerRef.current = setTimeout(() => {
         resolvePower(targetPlayerId, flatIndex);
@@ -1834,9 +1944,8 @@ export default function Game() {
       selectPower9Card(targetPlayerId, flatIndex);
       setPowerSelections(prev => [...prev, selection]);
       setPeekedCards(prev => [...prev, { playerIndex, row, col }]);
-      // Highlight the opponent whenever an opponent card is tapped.
-      // Selecting your own card first leaves the target null until the
-      // opponent card is picked — single-target version is intentional.
+      // Sync cue card so all clients anchor to the newly selected card.
+      setPowerCueCard({ playerId: targetPlayerId, cardIndex: flatIndex });
       if (targetPlayerId !== players[0]?.id) {
         setFocusTarget(targetPlayerId);
       }
@@ -1851,14 +1960,16 @@ export default function Game() {
 
       const nextSelections = [...powerSelections, selection];
       setPowerSelections(nextSelections);
+      // Sync cue card so all clients anchor to the newly selected card.
+      setPowerCueCard({ playerId: targetPlayerId, cardIndex: flatIndex });
 
-      // Write the opponent's ID as focus target as soon as their card is tapped.
       if (targetPlayerId !== players[0]?.id) {
         setFocusTarget(targetPlayerId);
       }
 
       if (nextSelections.length === 2) {
         setSelectedPowerCueAnchor(null);
+        setPowerCueCard(null);
         usePower10(
           { playerId: nextSelections[0].playerId, cardFlatIndex: nextSelections[0].cardFlatIndex },
           { playerId: nextSelections[1].playerId, cardFlatIndex: nextSelections[1].cardFlatIndex },
@@ -1877,6 +1988,8 @@ export default function Game() {
     usePower10,
     isSamePowerSelection,
     setFocusTarget,
+    setPeekRevealCard,
+    setPowerCueCard,
   ]);
   const handlePowerCardClickRef = useRef(handlePowerCardClick);
   handlePowerCardClickRef.current = handlePowerCardClick;
@@ -1998,7 +2111,6 @@ export default function Game() {
   };
 
   const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
-  const reactionMode = matchWindowActive;
 
   // ─── Focus mode: opponent-side spotlight/dim for power-card actions ─────────
   // Both signals come from shared Firestore state, so they fire on ALL clients
@@ -2057,7 +2169,7 @@ export default function Game() {
     : phase === 'giveaway'
     ? (canGiveAway ? '🎁 GIVE A CARD AWAY' : `🎁 ${giveawayGiverName} IS GIVING A CARD`)
     : phase === 'match_window'
-    ? '⚡ MATCH WINDOW'
+    ? (canReactThisWindow ? '⚡ MATCH WINDOW' : '🚫 KNOCKED - MATCH LOCKED')
     : phase === 'swap'
     ? (isMyTurn ? '🔄 SWAP OR DISCARD' : `${players[currentPlayerIndex]?.name}'S TURN`)
     : phase === 'draw'
@@ -2374,11 +2486,13 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(2)}
               onPowerClick={handlePowerClickP3}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p3?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p3.id ? submittedReactionCard : null}
+              reactionOrder={getPlayerReactionOrder(p3.id)}
               registerCardNode={registerCardNode}
               cardAreaGlowStyle={getPlayerCardGlowStyle(2)}
+              peekHighlightCards={buildPeekHighlightCards(2)}
             />
           )}
         </div>
@@ -2403,11 +2517,13 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(1)}
               onPowerClick={handlePowerClickP2}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p2?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
+              reactionOrder={getPlayerReactionOrder(p2.id)}
               registerCardNode={registerCardNode}
               cardAreaGlowStyle={getPlayerCardGlowStyle(1)}
+              peekHighlightCards={buildPeekHighlightCards(1)}
             />
           )}
         </div>
@@ -2451,11 +2567,13 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(3)}
               onPowerClick={handlePowerClickP4}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p4?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p4.id ? submittedReactionCard : null}
+              reactionOrder={getPlayerReactionOrder(p4.id)}
               registerCardNode={registerCardNode}
               cardAreaGlowStyle={getPlayerCardGlowStyle(3)}
+              peekHighlightCards={buildPeekHighlightCards(3)}
             />
           )}
         </div>
@@ -2466,11 +2584,11 @@ export default function Game() {
           <div style={{
             position: 'relative',
             background: isMyTurn
-              ? `linear-gradient(135deg, ${p1.color}20, ${p1.color}08)`
+              ? 'linear-gradient(135deg, rgba(88, 28, 135, 0.28), rgba(194, 65, 12, 0.14))'
               : 'rgba(255,255,255,0.04)',
-            border: isMyTurn ? `2px solid ${p1.color}80` : '2px solid rgba(255,255,255,0.08)',
+            border: isMyTurn ? '2px solid rgba(251, 191, 36, 0.88)' : '2px solid rgba(255,255,255,0.08)',
             borderRadius: 20, padding: '16px 24px',
-            boxShadow: isMyTurn ? `0 0 30px ${p1.color}30` : 'none',
+            boxShadow: isMyTurn ? '0 0 34px rgba(251, 191, 36, 0.24), inset 0 0 18px rgba(147, 51, 234, 0.12)' : 'none',
             transition: 'all 0.3s ease',
             animation: isMyTurn ? 'glow-ring-active 2s ease-in-out infinite' : 'none',
             ...getPlayerCardGlowStyle(0),
@@ -2497,6 +2615,21 @@ export default function Game() {
                   {calcVisibleScore(p1)} pts
                 </span>
               </div>
+              {localReactionOrder && (
+                <div style={{
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  background: getReactionBadgeColors(localReactionOrder).background,
+                  color: 'white',
+                  fontSize: 10,
+                  fontWeight: 900,
+                  fontFamily: 'Nunito',
+                  letterSpacing: '0.05em',
+                  boxShadow: getReactionBadgeColors(localReactionOrder).boxShadow,
+                }}>
+                  {getReactionOrderLabel(localReactionOrder)}
+                </div>
+              )}
               {powerInteractionActive && pendingPower === '7' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
@@ -2558,7 +2691,13 @@ export default function Game() {
                     fontFamily: 'Nunito',
                   }}
                 >
-                  {submittedReactionCard ? '✅ REACTION SENT' : '⚡ TAP YOUR MATCHING CARD'}
+                  {!canReactThisWindow
+                    ? '🚫 YOU KNOCKED - NO MATCHES'
+                    : localReactionOrder
+                    ? `✅ ${getReactionOrderLabel(localReactionOrder)}`
+                    : submittedReactionCard
+                    ? '✅ REACTION SENT'
+                    : '⚡ TAP YOUR MATCHING CARD'}
                 </motion.div>
               )}
             </div>
@@ -2578,11 +2717,13 @@ export default function Game() {
                 powerModeActive={powerInteractionActive}
                 powerTone={powerTone}
                 onPowerClick={handlePowerClickP1}
-                reactionSelectable={reactionMode}
+                reactionSelectable={canReactToPlayer(p1?.id)}
                 onReactionClick={handleReactionCardClick}
                 reactionSelected={submittedReactionCard}
+                reactionOrder={getPlayerReactionOrder(p1.id)}
                 peekPhase={peekActive}
                 registerCardNode={registerCardNode}
+                peekHighlightCards={buildPeekHighlightCards(0)}
               />
             </DebugProfiler>
           </div>
@@ -2684,7 +2825,11 @@ export default function Game() {
               {phase === 'giveaway' && canGiveAway && '🎁 Choose one of your cards to give away'}
               {phase === 'giveaway' && !canGiveAway && `🎁 ${giveawayGiverName} is giving a card away...`}
               {reactionMode && (
-                submittedReactionCard
+                !canReactThisWindow
+                  ? '🚫 You knocked, so you are out of match reactions'
+                  : localReactionOrder
+                  ? `✅ You were the ${formatOrdinal(localReactionOrder)} reactor`
+                  : submittedReactionCard
                   ? '✅ Reaction submitted'
                   : '⚡ Reaction window: tap any matching card now'
               )}

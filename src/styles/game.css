@@ -208,20 +208,26 @@
 /* Card Styles */
 .game-card {
   border-radius: 14px;
-  border: 3px solid white;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.3);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 3px solid rgba(255, 232, 196, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(255, 232, 196, 0.24),
+    0 6px 20px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,248,230,0.32);
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
   cursor: pointer;
   user-select: none;
 }
 
 .game-card:hover {
   transform: translateY(-6px) scale(1.03);
-  box-shadow: 0 14px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.3);
+  box-shadow:
+    0 0 0 1px rgba(255, 232, 196, 0.34),
+    0 14px 32px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,248,230,0.36);
 }
 
 .game-card-back {
-  background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #1a237e 100%);
+  background: linear-gradient(145deg, #0f2f5e 0%, #1a5a96 45%, #134277 100%);
   position: relative;
   overflow: hidden;
 }
@@ -230,12 +236,12 @@
   content: '';
   position: absolute;
   inset: 6px;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(210,236,255,0.22);
   border-radius: 8px;
   background: repeating-linear-gradient(
     45deg,
-    rgba(255,255,255,0.03) 0px,
-    rgba(255,255,255,0.03) 2px,
+    rgba(255,240,189,0.06) 0px,
+    rgba(255,240,189,0.06) 2px,
     transparent 2px,
     transparent 8px
   );

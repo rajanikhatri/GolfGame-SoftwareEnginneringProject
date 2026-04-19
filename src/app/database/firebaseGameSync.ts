@@ -196,3 +196,21 @@ export async function syncSetPowerFocusTarget(
 ): Promise<void> {
   await applyAction(roomCode, state => ({ ...state, powerFocusTargetId: targetPlayerId }));
 }
+
+// Sets or clears the most-recently selected card during power 9/10 selection so all
+// connected clients can anchor the hand cue to the correct card position.
+export async function syncSetPowerCueCard(
+  roomCode: string,
+  card: { playerId: string; cardIndex: number } | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, powerCueCard: card }));
+}
+
+// Sets or clears which specific card is being peeked (power 7 = own card,
+// power 8 = opponent card) so all connected clients can show the reveal.
+export async function syncSetPeekRevealCard(
+  roomCode: string,
+  card: { playerId: string; cardIndex: number } | null,
+): Promise<void> {
+  await applyAction(roomCode, state => ({ ...state, peekRevealCard: card }));
+}
