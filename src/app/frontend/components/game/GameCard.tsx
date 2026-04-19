@@ -58,7 +58,7 @@ export function GameCard({
 }: GameCardProps) {
   const dims = SIZES[size];
   const isEmptySlot = !card;
-  const showBack = !isEmptySlot && (faceDown || !card.faceUp);
+  const showBack = faceDown || (!isEmptySlot && !card.faceUp);
 
   const isRed = card?.suit === 'hearts' || card?.suit === 'diamonds';
   const isJoker = card?.suit === 'joker';

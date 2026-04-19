@@ -623,7 +623,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const isMyDrawnCard = state.drawnCard !== null &&
       state.playerOrder[state.currentPlayerIndex] === myPlayerIdRef.current;
     setDrawnCard(state.drawnCard
-      ? { ...(state.drawnCard as Card), faceUp: isMyDrawnCard }
+      ? {
+          ...(state.drawnCard as Card),
+          // Show the acting player's private draw only to them, while still
+          // preserving public face-up draws such as taking from discard.
+          faceUp: Boolean((state.drawnCard as Card).faceUp || isMyDrawnCard),
+        }
       : null);
     setPhase(mapPhase(state.phase));
     setFinalRound(state.finalRound);
@@ -1093,7 +1098,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(state.currentPlayerIndex);
     setCurrentTurnPlayerId(state.playerOrder[state.currentPlayerIndex] ?? null);
-    setDrawnCard(state.drawnCard ? { ...(state.drawnCard as Card), faceUp: true } : null);
+    setDrawnCard(
+      state.drawnCard
+        ? {
+            ...(state.drawnCard as Card),
+            // In solo mode, only the local player's private draw is revealed.
+            // Public face-up draws (for example taking from discard) stay visible.
+            faceUp: Boolean((state.drawnCard as Card).faceUp || state.playerOrder[state.currentPlayerIndex] === 'p1'),
+          }
+        : null,
+    );
     setPhase(mapPhase(state.phase));
     setFinalRound(state.finalRound);
     setKnockedBy(state.knockedById);

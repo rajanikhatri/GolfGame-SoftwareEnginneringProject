@@ -1,7 +1,7 @@
 import { Profiler, memo, type ReactNode, type CSSProperties, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
-import { Flag, RotateCcw, ChevronDown, Zap, Star, Eye } from 'lucide-react';
+import { Flag, ChevronDown, Zap, Eye } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
@@ -654,14 +654,22 @@ function PlayerCardGrid({
 
   return (
     <div
-      className="game-player-grid"
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--game-player-grid-row-gap, 6px)' }}
+      className={`game-player-grid${isYou ? ' game-player-grid--bottom' : ''}`}
+      style={
+        isYou
+          ? undefined
+          : { display: 'flex', flexDirection: 'column', gap: 'var(--game-player-grid-row-gap, 6px)' }
+      }
     >
       {player.cards.map((row, ri) => (
         <div
           key={ri}
-          className="game-player-grid__row"
-          style={{ display: 'flex', gap: 'var(--game-player-grid-col-gap, 6px)' }}
+          className={`game-player-grid__row${isYou ? ' game-player-grid__row--bottom' : ''}`}
+          style={
+            isYou
+              ? undefined
+              : { display: 'flex', gap: 'var(--game-player-grid-col-gap, 6px)' }
+          }
         >
           {row.map((card, ci) => {
             const isPeeked = Boolean(revealCards?.some(selection => selection.row === ri && selection.col === ci));
@@ -734,6 +742,8 @@ function PlayerCardGrid({
                   : { type: 'spring', stiffness: 420, damping: 16, opacity: { duration: 0.18 } }}
                 style={{
                   position: 'relative',
+                  gridColumn: isYou ? (ri < 2 ? ci + 1 : ri + 1) : undefined,
+                  gridRow: isYou ? (ri < 2 ? ri + 1 : ci + 1) : undefined,
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,
                 }}
               >
@@ -904,10 +914,11 @@ function PlayerCardGrid({
                 {/* Peek indicator */}
                 {isPeeked && (
                   <div style={{
-                    position: 'absolute', bottom: -20, left: '50%', transform: 'translateX(-50%)',
+                    position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)',
                     background: 'rgba(66,165,245,0.95)', borderRadius: 50, padding: '1px 8px',
                     fontSize: 9, fontWeight: 900, color: 'white', fontFamily: 'Nunito',
-                    whiteSpace: 'nowrap', zIndex: 5,
+                    whiteSpace: 'nowrap', zIndex: 9,
+                    boxShadow: '0 3px 10px rgba(66,165,245,0.45)',
                   }}>👁 PEEKING</div>
                 )}
               </motion.div>
@@ -1016,12 +1027,6 @@ function PlayerPanelComp({
             {player.name}
             {isActive && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4CAF50', animation: 'pulse-glow 1s infinite' }} />}
           </div>
-          <div className="score-badge" style={{ padding: '1px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Star size={9} fill="#FFC107" color="#FFC107" />
-            <span style={{ fontSize: 11, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>
-              {isYou ? score : '?'}
-            </span>
-          </div>
         </div>
 
         {isActive && player.isAI && aiThinking && <AIThinkingDots />}
@@ -1116,34 +1121,101 @@ function PileArea({
       alignItems: 'center',
       gap: 'var(--game-pile-gap, 16px)',
     }}>
-      <div className="game-pile-area__piles" style={{ display: 'flex', gap: 'var(--game-pile-row-gap, 24px)', alignItems: 'center' }}>
+      <div
+        className="game-pile-area__piles"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'var(--game-drawn-slot-width, 132px) var(--game-pile-slot-width, 104px) auto var(--game-pile-slot-width, 104px)',
+          gap: 'var(--game-pile-row-gap, 24px)',
+          alignItems: 'start',
+        }}
+      >
+        {/* Drawn card preview */}
+        <div
+          className="game-pile-area__drawn-slot"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            width: 'var(--game-drawn-slot-width, 132px)',
+          }}
+        >
+          <div style={{
+            minHeight: 38,
+            fontSize: 11, fontWeight: 800, color: drawnCard ? '#FFC107' : 'transparent',
+            fontFamily: 'Nunito', letterSpacing: '0.1em',
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+          }}>
+            DRAWN CARD
+            {drawnCard && (drawnCard.rank === '7' || drawnCard.rank === '8') && (
+              <span style={{
+                display: 'inline-block',
+                marginTop: 6,
+                background: drawnCard.rank === '7' ? '#1565C0' : '#6A1B9A',
+                borderRadius: 50, padding: '2px 10px', fontSize: 10, color: 'white',
+              }}>
+                {drawnCard.rank === '7' ? '👁 PEEK SELF' : '🕵️ SPY'}
+              </span>
+            )}
+          </div>
+          <div style={{ position: 'relative', minHeight: 98, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <AnimatePresence>
+              {drawnCard && (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0, x: 20 }}
+                  animate={{ scale: 1, opacity: 1, x: 0 }}
+                  exit={{ scale: 0.5, opacity: 0, x: 20 }}
+                >
+                  <div style={{ position: 'relative' }}>
+                    {showSoloChangeCue && isMyTurn && (
+                      <HandCue
+                        size={64}
+                        style={{
+                          left: '50%',
+                          top: '50%',
+                          marginLeft: -32,
+                          marginTop: -32,
+                          zIndex: 12,
+                        }}
+                      />
+                    )}
+                    <GameCard card={drawnCard} size="md" glowing />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
         {/* Draw Pile */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="game-pile-area__draw-slot flex flex-col items-center gap-2">
           <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
             DRAW PILE
           </span>
           <div
             className="card-pile"
             onClick={onDraw}
-            style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
+            style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative', marginTop: 14 }}
           >
-            {/* Stack shadow layers */}
+            {/* Back-facing stack layers */}
             {[3, 2, 1].map(offset => (
               <div
                 key={offset}
                 style={{
                   position: 'absolute',
-                  top: offset * 2, left: offset * 2,
-                  width: 88, height: 124,
-                  borderRadius: 14,
-                  background: '#1a237e',
-                  border: '3px solid rgba(255,255,255,0.15)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                  top: offset * 2,
+                  left: offset * 2,
+                  zIndex: offset,
+                  pointerEvents: 'none',
                 }}
-              />
+              >
+                <GameCard faceDown size="lg" />
+              </div>
             ))}
             <div style={{ position: 'relative', zIndex: 4 }}>
-              <GameCard faceDown size="lg" glowing={canDraw} />
+              <GameCard faceDown size="lg" />
             </div>
             {canDraw && (
               <div style={{
@@ -1157,9 +1229,10 @@ function PileArea({
               </div>
             )}
             <div className="game-header__badge" style={{
-              position: 'absolute', top: -24, left: '50%', transform: 'translateX(-50%)',
+              position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
               background: 'rgba(0,0,0,0.4)', borderRadius: 50, padding: '2px 8px',
               fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', whiteSpace: 'nowrap',
+              zIndex: 8,
             }}>
               {drawPile.length > 0 ? `${drawPile.length} left` : '♾ reshuffling'}
             </div>
@@ -1167,7 +1240,7 @@ function PileArea({
         </div>
 
         {/* Divider */}
-        <div style={{
+        <div className="game-pile-area__divider" style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         }}>
           <ChevronDown size={16} color="rgba(255,255,255,0.3)" />
@@ -1176,7 +1249,7 @@ function PileArea({
         </div>
 
         {/* Discard Pile */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="game-pile-area__discard-slot flex flex-col items-center gap-2">
           <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', letterSpacing: '0.1em' }}>
             DISCARD
           </span>
@@ -1233,50 +1306,6 @@ function PileArea({
           </div>
         </div>
       </div>
-
-      {/* Drawn card preview */}
-      <AnimatePresence>
-        {drawnCard && (
-          <motion.div
-            initial={{ scale: 0.5, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.5, opacity: 0, y: 20 }}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-            }}
-          >
-            <div style={{
-              fontSize: 11, fontWeight: 800, color: '#FFC107',
-              fontFamily: 'Nunito', letterSpacing: '0.1em',
-            }}>
-              DRAWN CARD — SWAP OR DISCARD
-              {(drawnCard.rank === '7' || drawnCard.rank === '8') && (
-                <span style={{
-                  marginLeft: 8, background: drawnCard.rank === '7' ? '#1565C0' : '#6A1B9A',
-                  borderRadius: 50, padding: '2px 10px', fontSize: 10, color: 'white',
-                }}>
-                  {drawnCard.rank === '7' ? '👁 PEEK SELF' : '🕵️ SPY'}
-                </span>
-              )}
-            </div>
-            <div style={{ position: 'relative' }}>
-              {showSoloChangeCue && isMyTurn && (
-                <HandCue
-                  size={64}
-                  style={{
-                    left: '50%',
-                    top: '50%',
-                    marginLeft: -32,
-                    marginTop: -32,
-                    zIndex: 12,
-                  }}
-                />
-              )}
-              <GameCard card={drawnCard} size="md" glowing />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -1311,6 +1340,7 @@ export default function Game() {
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
   const [peekActive, setPeekActive] = useState(true);
   const p1 = players[0];
@@ -2250,6 +2280,70 @@ export default function Game() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showRulesModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="game-rules-modal__backdrop"
+              onClick={() => setShowRulesModal(false)}
+            />
+            <div className="game-rules-modal__viewport">
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.985 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                className="game-rules-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Golf rules"
+              >
+                <div className="game-rules-modal__header">
+                  <div>
+                    <div className="game-rules-modal__eyebrow">Rules</div>
+                    <div className="game-rules-modal__title">How Golf Works</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="game-rules-modal__close"
+                    onClick={() => setShowRulesModal(false)}
+                    aria-label="Close rules"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="game-rules-modal__body">
+                  <div className="game-rules-modal__section">
+                    <div className="game-rules-modal__section-title">Goal</div>
+                    <div className="game-rules-modal__text">Finish with the lowest total score.</div>
+                  </div>
+                  <div className="game-rules-modal__section">
+                    <div className="game-rules-modal__section-title">Power Cards</div>
+                    <div className="game-rules-modal__rule"><strong>7:</strong> Peek one of your own face-down cards.</div>
+                    <div className="game-rules-modal__rule"><strong>8:</strong> Spy one opponent face-down card.</div>
+                  </div>
+                  <div className="game-rules-modal__section">
+                    <div className="game-rules-modal__section-title">Special Scores</div>
+                    <div className="game-rules-modal__rule"><strong>K♠ / K♣:</strong> worth `-2`.</div>
+                    <div className="game-rules-modal__rule"><strong>★:</strong> worth `-1`.</div>
+                  </div>
+                  <div className="game-rules-modal__section">
+                    <div className="game-rules-modal__section-title">Turn Flow</div>
+                    <div className="game-rules-modal__rule">Draw from the pile or take the discard.</div>
+                    <div className="game-rules-modal__rule">Swap the drawn card into your grid or discard it.</div>
+                    <div className="game-rules-modal__rule">Press <strong>KNOCK</strong> when you want to end the round.</div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Disconnect notification */}
       <AnimatePresence>
         {disconnectedPlayerName && (
@@ -2322,6 +2416,14 @@ export default function Game() {
             backgroundClip: 'text',
             fontFamily: 'Nunito',
           }}>⛳ GOLF</span>
+          <button
+            type="button"
+            className="game-header__info-button"
+            onClick={() => setShowRulesModal(true)}
+            aria-label="Open rules"
+          >
+            i
+          </button>
           {finalRound && (
             <div style={{
               background: 'linear-gradient(135deg, #B71C1C, #E53935)',
@@ -2331,20 +2433,6 @@ export default function Game() {
               boxShadow: '0 4px 12px rgba(229,57,53,0.5)',
             }}>🚨 FINAL ROUND</div>
           )}
-          {/* Power card legend */}
-          <div className="game-header__legend" style={{
-            display: 'flex', gap: 6, alignItems: 'center',
-            background: 'rgba(255,255,255,0.06)', borderRadius: 50,
-            padding: '4px 12px', border: '1px solid rgba(255,255,255,0.1)',
-          }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>7=👁YOU</span>
-            <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>8=🕵️OPP</span>
-            <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>K♠/♣=-2</span>
-            <span style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.2)' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito' }}>★=-1</span>
-          </div>
         </div>
 
         <div className="game-header__status" style={{
@@ -2364,13 +2452,6 @@ export default function Game() {
         </div>
 
         <div className="game-header__controls" style={{ display: 'flex', gap: 8 }}>
-          <button
-            className="arcade-btn arcade-btn-blue"
-            style={{ fontSize: 12, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
-            onClick={() => { initGame(); }}
-          >
-            <RotateCcw size={14} /> RESTART
-          </button>
           <button
             className="arcade-btn arcade-btn-red"
             style={{ fontSize: 12, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -2503,6 +2584,7 @@ export default function Game() {
 
         {/* Bottom player (P1 - YOU) */}
         <div className="game-board__slot game-board__slot--bottom game-bottom-section" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, ...getPlayerDimStyle(0) }}>
+          <div className="game-bottom-shell">
           {/* Player hand */}
           <div className="game-bottom-panel" style={{
             position: 'relative',
@@ -2532,12 +2614,6 @@ export default function Game() {
               <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>
                 ★ YOU ({p1.name})
               </span>
-              <div className="score-badge" style={{ padding: '2px 10px' }}>
-                <Star size={10} fill="#FFC107" color="#FFC107" style={{ marginRight: 4 }} />
-                <span style={{ fontSize: 12, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>
-                  {calcVisibleScore(p1)} pts
-                </span>
-              </div>
               {powerInteractionActive && pendingPower === '7' && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
@@ -2638,14 +2714,14 @@ export default function Game() {
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="game-action-button arcade-btn arcade-btn-blue"
+                  className="game-action-button game-action-button--right arcade-btn arcade-btn-blue"
                   style={{ fontSize: 14, padding: '10px 20px' }}
                   onClick={discardDrawn}
                 >
                   🗑 DISCARD DRAWN
                 </motion.button>
                 {swapCountdown !== null && (
-                  <div style={{
+                  <div className="game-action-pill game-action-pill--right" style={{
                     fontSize: 13, fontWeight: 900,
                     color: swapCountdown <= 3 ? '#FF5252' : '#FFC107',
                     fontFamily: 'Nunito',
@@ -2666,7 +2742,7 @@ export default function Game() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 whileTap={{ scale: 0.95 }}
-                className="game-action-button arcade-btn arcade-btn-blue"
+                className="game-action-button game-action-button--right arcade-btn arcade-btn-blue"
                 style={{ fontSize: 13, padding: '10px 18px' }}
                 onClick={skipPower}
               >
@@ -2679,7 +2755,7 @@ export default function Game() {
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="game-action-button arcade-btn arcade-btn-blue"
+                  className="game-action-button game-action-button--right arcade-btn arcade-btn-blue"
                   style={{ fontSize: 13, padding: '10px 18px' }}
                   onClick={() => commitPower9Choice(false)}
                 >
@@ -2688,7 +2764,7 @@ export default function Game() {
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="game-action-button arcade-btn arcade-btn-blue"
+                  className="game-action-button game-action-button--right arcade-btn arcade-btn-blue"
                   style={{ fontSize: 13, padding: '10px 18px' }}
                   onClick={() => commitPower9Choice(true)}
                 >
@@ -2700,7 +2776,7 @@ export default function Game() {
             {!finalRound && isMyTurn && phase === 'draw' && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                className="game-action-button arcade-btn arcade-btn-red"
+                className="game-action-button game-action-button--left arcade-btn arcade-btn-red"
                 style={{ fontSize: 15, padding: '12px 24px' }}
                 onClick={knock}
               >
@@ -2708,32 +2784,7 @@ export default function Game() {
                 KNOCK
               </motion.button>
             )}
-
-            <div className="game-action-hint" style={{
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 12, padding: '8px 16px',
-              fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
-              fontFamily: 'Nunito', textAlign: 'center',
-            }}>
-              {powerInteractionActive && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
-              {powerInteractionActive && pendingPower === '8' && '🕵️ Tap one opponent card to spy, or skip'}
-              {powerInteractionActive && pendingPower === '9' && powerSelections.length < 2 && '👀 Pick 2 cards from 2 different players'}
-              {powerInteractionActive && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
-              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
-              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
-              {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
-              {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
-              {phase === 'giveaway' && canGiveAway && '🎁 Choose one of your cards to give away'}
-              {phase === 'giveaway' && !canGiveAway && `🎁 ${giveawayGiverName} is giving a card away...`}
-              {reactionMode && (
-                submittedReactionCard
-                  ? '✅ Reaction submitted'
-                  : '⚡ Reaction window: tap any matching card now'
-              )}
-              {!reactionMode && !isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
-            </div>
+          </div>
           </div>
         </div>
       </div>
