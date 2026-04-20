@@ -645,6 +645,15 @@ export function discardDrawnCard(state: GameState, playerId: string): GameState 
 
 // ─── Phase: React ─────────────────────────────────────────────────────────────
 
+function isReactionBlockedByKnock(
+  state: GameState,
+  reactingPlayerId: string,
+  targetPlayerId: string,
+): boolean {
+  if (!state.knockedById) return false;
+  return reactingPlayerId === state.knockedById || targetPlayerId === state.knockedById;
+}
+
 // A player submits a reaction (they claim to have a matching card)
 export function submitReaction(
   state: GameState,
@@ -655,6 +664,7 @@ export function submitReaction(
 ): GameState {
   if (!state.reactionWindowOpen) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
+  if (isReactionBlockedByKnock(state, reactingPlayerId, targetPlayerId)) return state;
 
   return {
     ...state,
@@ -674,7 +684,9 @@ export function resolveReactionWindow(state: GameState): GameState {
   }
 
   const discardedValue = state.lastDiscardedCard.value;
-  const sorted = [...state.reactions].sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = [...state.reactions]
+    .filter(reaction => !isReactionBlockedByKnock(state, reaction.playerId, reaction.targetPlayerId))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   const winningReaction =
     sorted.find(reaction => {
