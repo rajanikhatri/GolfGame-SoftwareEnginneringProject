@@ -604,6 +604,7 @@
   justify-content: flex-end;
   flex-wrap: nowrap;
   flex-shrink: 0;
+  margin-right: -28px;
 }
 
 .mode-selection-account-profile-wrap {
@@ -1000,6 +1001,7 @@
   .mode-selection-account-bar {
     justify-content: center;
     flex-wrap: wrap;
+    margin-right: 0;
   }
 
   .mode-selection-account-popover {

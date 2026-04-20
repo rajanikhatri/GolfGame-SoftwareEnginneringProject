@@ -1142,11 +1142,12 @@ function PileArea({
           }}
         >
           <div style={{
-            minHeight: 38,
+            minHeight: drawnCard && (drawnCard.rank === '7' || drawnCard.rank === '8') ? 38 : 0,
             fontSize: 11, fontWeight: 800, color: drawnCard ? '#FFC107' : 'transparent',
             fontFamily: 'Nunito', letterSpacing: '0.1em',
             textAlign: 'center',
             whiteSpace: 'nowrap',
+            lineHeight: 1,
           }}>
             DRAWN CARD
             {drawnCard && (drawnCard.rank === '7' || drawnCard.rank === '8') && (
@@ -1160,7 +1161,7 @@ function PileArea({
               </span>
             )}
           </div>
-          <div style={{ position: 'relative', minHeight: 98, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', minHeight: 124, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <AnimatePresence>
               {drawnCard && (
                 <motion.div
@@ -1181,7 +1182,7 @@ function PileArea({
                         }}
                       />
                     )}
-                    <GameCard card={drawnCard} size="md" glowing />
+                    <GameCard card={drawnCard} size="lg" glowing />
                   </div>
                 </motion.div>
               )}
@@ -1197,7 +1198,7 @@ function PileArea({
           <div
             className="card-pile"
             onClick={onDraw}
-            style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative', marginTop: 14 }}
+            style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
           >
             {/* Back-facing stack layers */}
             {[3, 2, 1].map(offset => (
@@ -1216,6 +1217,27 @@ function PileArea({
             ))}
             <div style={{ position: 'relative', zIndex: 4 }}>
               <GameCard faceDown size="lg" />
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                background: 'rgba(8, 18, 46, 0.72)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: 999,
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 900,
+                color: 'rgba(255,255,255,0.9)',
+                fontFamily: 'Nunito',
+                letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 6px 18px rgba(0,0,0,0.28)',
+                zIndex: 9,
+                pointerEvents: 'none',
+              }}>
+                {drawPile.length > 0 ? `${drawPile.length} left` : '♾ reshuffling'}
+              </div>
             </div>
             {canDraw && (
               <div style={{
@@ -1228,14 +1250,6 @@ function PileArea({
                 ▲ DRAW CARD
               </div>
             )}
-            <div className="game-header__badge" style={{
-              position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.4)', borderRadius: 50, padding: '2px 8px',
-              fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Nunito', whiteSpace: 'nowrap',
-              zIndex: 8,
-            }}>
-              {drawPile.length > 0 ? `${drawPile.length} left` : '♾ reshuffling'}
-            </div>
           </div>
         </div>
 
@@ -2612,7 +2626,7 @@ export default function Game() {
                 fontSize: 18, flexShrink: 0,
               }}>{p1.avatar}</div>
               <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>
-                ★ YOU ({p1.name})
+                ★ YOU
               </span>
               {powerInteractionActive && pendingPower === '7' && (
                 <motion.div

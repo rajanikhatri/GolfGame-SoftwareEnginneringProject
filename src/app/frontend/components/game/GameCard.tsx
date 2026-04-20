@@ -83,7 +83,7 @@ export function GameCard({
     ...style,
   };
 
-  if (isEmptySlot) {
+  if (isEmptySlot && !showBack) {
   return (
     <div
       style={{
