@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   setDoc,
@@ -328,4 +329,40 @@ export async function setRoomGameState<T extends Record<string, unknown>>(code: 
 export async function clearRoomGameState(code: string) {
   const ref = roomGameStateRef(code);
   await deleteDoc(ref);
+}
+
+// ─── Room Chat ────────────────────────────────────────────────────────────────
+
+export interface FirebaseRoomChatMessage {
+  id: string;
+  playerId: string;
+  playerName: string;
+  message: string;
+  timestamp: number;
+}
+
+function roomChatCol(code: string) {
+  return collection(firebaseDb, 'rooms', normalizeRoomCode(code), 'chat');
+}
+
+export async function sendRoomChatMessage(
+  code: string,
+  msg: Omit<FirebaseRoomChatMessage, 'id' | 'timestamp'>,
+): Promise<void> {
+  const msgRef = doc(roomChatCol(code));
+  await setDoc(msgRef, {
+    ...msg,
+    id: msgRef.id,
+    timestamp: Date.now(),
+  } satisfies FirebaseRoomChatMessage);
+}
+
+export function subscribeToRoomChat(
+  code: string,
+  onMessages: (messages: FirebaseRoomChatMessage[]) => void,
+): Unsubscribe {
+  const q = query(roomChatCol(code), orderBy('timestamp', 'asc'));
+  return onSnapshot(q, snap => {
+    onMessages(snap.docs.map(d => d.data() as FirebaseRoomChatMessage));
+  });
 }

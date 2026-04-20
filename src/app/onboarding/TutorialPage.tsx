@@ -8,6 +8,8 @@ import {
   Shuffle,
   Target,
   Trophy,
+  Zap,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -42,9 +44,27 @@ const tutorialSteps = [
     visual: 'memory',
   },
   {
-    title: 'Special Rule',
+    title: 'Power Cards: Peek & Spy',
+    icon: Eye,
+    body: 'Drawing a 7 lets you secretly peek at one of your own face-down cards — useful for planning your swaps. Drawing an 8 lets you spy on one face-down card belonging to any opponent.',
+    visual: 'peek_spy',
+  },
+  {
+    title: 'Power Cards: Swap',
+    icon: ArrowLeftRight,
+    body: 'Drawing a 9 lets you swap one of your cards with a card from any opponent\'s hand — choose the highest one you\'ve seen. Drawing a 10 lets you swap any two cards within your own hand.',
+    visual: 'swap_power',
+  },
+  {
+    title: 'Reaction Window',
+    icon: Zap,
+    body: 'When any card is discarded, a brief reaction window opens. Non-knocking players can quickly swap one of their own cards with the discarded card. The fastest player wins the swap.',
+    visual: 'reaction',
+  },
+  {
+    title: 'Column Match & Giveaway',
     icon: RotateCcw,
-    body: 'If two cards in the same column match by value, they cancel out and count as 0 points for that column.',
+    body: 'Two cards in the same column that share a value cancel out and score 0 together. As a bonus, you can then give one of those matched cards to any opponent — raising their score.',
     visual: 'match',
   },
   {
@@ -63,6 +83,37 @@ function StepVisual({ type }: { type: string }) {
         <div className="tutorial-mini-card face-down">?</div>
         <div className="tutorial-mini-card face-up">{type === 'match' ? '8' : '4'}</div>
         <div className="tutorial-mini-card face-up">{type === 'match' ? '8' : 'K'}</div>
+      </div>
+    );
+  }
+
+  if (type === 'peek_spy') {
+    return (
+      <div className="tutorial-card-grid">
+        <div className="tutorial-mini-card face-down">?</div>
+        <div className="tutorial-mini-card face-down">?</div>
+        <div className="tutorial-mini-card face-up" style={{ outline: '2px solid #42A5F5', outlineOffset: 2 }}>4</div>
+        <div className="tutorial-mini-card face-down">?</div>
+      </div>
+    );
+  }
+
+  if (type === 'swap_power') {
+    return (
+      <div className="tutorial-flow-visual">
+        <div className="tutorial-mini-card face-up" style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>Q</div>
+        <ArrowLeftRight size={24} style={{ color: '#FFD600', flexShrink: 0 }} />
+        <div className="tutorial-mini-card face-up" style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>2</div>
+      </div>
+    );
+  }
+
+  if (type === 'reaction') {
+    return (
+      <div className="tutorial-score-card">
+        <Zap size={36} color="#FFD600" />
+        <span>React fast!</span>
+        <strong>Quick swap</strong>
       </div>
     );
   }

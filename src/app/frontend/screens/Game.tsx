@@ -1,7 +1,7 @@
 import { Profiler, memo, type ReactNode, type CSSProperties, useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
-import { Flag, ChevronDown, Zap, Eye } from 'lucide-react';
+import { Flag, ChevronDown, Zap, Eye, MessageSquare, Send } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
@@ -1400,6 +1400,7 @@ export default function Game() {
     powerFocusTargetId, setFocusTarget,
     peekRevealCard, setPeekRevealCard,
     powerCueCard, setPowerCueCard,
+    chatMessages, sendChat,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
@@ -1452,6 +1453,13 @@ export default function Game() {
   const [opponentSwapCueAnchor, setOpponentSwapCueAnchor] = useState<CardAnchor | null>(null);
   const [powerSwapAnimation, setPowerSwapAnimation] = useState<PowerSwapAnimation | null>(null);
   const [powerCompletionLabel, setPowerCompletionLabel] = useState<string | null>(null);
+  const [showChat, setShowChat] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const chatPanelEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showChat) chatPanelEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, showChat]);
   const [submittedReactionCard, setSubmittedReactionCard] = useState<{
     playerId: string;
     row: number;
@@ -2449,6 +2457,118 @@ export default function Game() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* In-game chat (multiplayer only) */}
+      {gameMode === 'multiplayer' && (
+        <div style={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 60,
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
+          fontFamily: 'Nunito, sans-serif',
+        }}>
+          {showChat && (
+            <div style={{
+              width: 272, background: 'rgba(6,13,27,0.96)',
+              border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14,
+              display: 'flex', flexDirection: 'column', maxHeight: 300, overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            }}>
+              <div style={{
+                padding: '8px 14px', fontSize: 11, fontWeight: 900, letterSpacing: '0.08em',
+                color: 'rgba(255,255,255,0.45)', borderBottom: '1px solid rgba(255,255,255,0.07)',
+                flexShrink: 0,
+              }}>
+                CHAT
+              </div>
+              <div style={{
+                flex: 1, overflowY: 'auto', padding: '8px 10px',
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                {chatMessages.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '8px 0' }}>
+                    No messages yet
+                  </div>
+                )}
+                {chatMessages.map(msg => {
+                  const isMe = msg.playerId === myPlayerId;
+                  return (
+                    <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                      {!isMe && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 2, paddingLeft: 4 }}>
+                          {msg.playerName}
+                        </span>
+                      )}
+                      <div style={{
+                        padding: '5px 10px', borderRadius: 10, maxWidth: '85%',
+                        fontSize: 12, fontWeight: 600, color: 'white', wordBreak: 'break-word',
+                        background: isMe ? 'rgba(30,136,229,0.75)' : 'rgba(255,255,255,0.10)',
+                      }}>
+                        {msg.message}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={chatPanelEndRef} />
+              </div>
+              <div style={{
+                display: 'flex', gap: 6, padding: '8px 10px',
+                borderTop: '1px solid rgba(255,255,255,0.07)', flexShrink: 0,
+              }}>
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && chatInput.trim()) {
+                      sendChat(chatInput.trim());
+                      setChatInput('');
+                    }
+                  }}
+                  placeholder="Say something…"
+                  style={{
+                    flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'white',
+                    fontFamily: 'Nunito, sans-serif', outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => { if (chatInput.trim()) { sendChat(chatInput.trim()); setChatInput(''); } }}
+                  style={{
+                    width: 32, height: 32, background: 'rgba(30,136,229,0.8)', border: 'none',
+                    borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', flexShrink: 0,
+                  }}
+                  aria-label="Send message"
+                >
+                  <Send size={14} color="white" />
+                </button>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => setShowChat(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 20,
+              background: showChat ? 'rgba(30,136,229,0.85)' : 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              color: 'white', fontSize: 13, fontWeight: 700,
+              fontFamily: 'Nunito, sans-serif', cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            }}
+            aria-label={showChat ? 'Hide chat' : 'Show chat'}
+          >
+            <MessageSquare size={15} />
+            {showChat ? 'Hide' : 'Chat'}
+            {!showChat && chatMessages.length > 0 && (
+              <span style={{
+                background: '#1E88E5', borderRadius: 10,
+                fontSize: 10, fontWeight: 900, padding: '1px 6px',
+              }}>
+                {chatMessages.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Peek phase overlay */}
       <AnimatePresence>

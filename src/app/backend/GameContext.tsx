@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { registerPresence, subscribeToRoomPresence } from '../database/firebase';
-import { completeRoomMatch } from '../database/firebaseRooms';
+import { completeRoomMatch, sendRoomChatMessage, subscribeToRoomChat } from '../database/firebaseRooms';
 import {
   subscribeToGameState,
   syncEndPeek,
@@ -525,6 +525,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameMode, roomCode]);
+
+  // ── Multiplayer: Room chat subscription ─────────────────────────────────────
+  useEffect(() => {
+    if (gameMode !== 'multiplayer' || !roomCode) return;
+    const unsub = subscribeToRoomChat(roomCode, (msgs) => {
+      setChatMessages(msgs.map(m => ({
+        id: m.id,
+        playerId: m.playerId,
+        playerName: m.playerName,
+        message: m.message,
+        timestamp: new Date(m.timestamp),
+      })));
+    });
+    return () => unsub();
   }, [gameMode, roomCode]);
 
   // ── Multiplayer: Reaction window timer ─────────────────────────────────────
@@ -1387,17 +1402,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, finalRound, gameMode]);
 
   const sendChat = useCallback((message: string) => {
+    if (gameMode === 'multiplayer' && roomCodeRef.current) {
+      sendRoomChatMessage(roomCodeRef.current, {
+        playerId: myPlayerId || 'p1',
+        playerName: playerName || 'YOU',
+        message,
+      }).catch(console.error);
+      return; // Firestore subscription updates chatMessages for all clients
+    }
     setChatMessages(prev => [...prev, {
       id: Date.now().toString(),
       playerId: myPlayerId || 'p1',
       playerName: playerName || 'YOU',
       message, timestamp: new Date(),
     }]);
-  }, [myPlayerId, playerName]);
+  }, [gameMode, myPlayerId, playerName]);
 
   const addChatMessage = useCallback((msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    if (gameMode === 'multiplayer' && roomCodeRef.current) {
+      sendRoomChatMessage(roomCodeRef.current, msg).catch(console.error);
+      return; // Firestore subscription updates chatMessages for all clients
+    }
     setChatMessages(prev => [...prev, { ...msg, id: Date.now().toString(), timestamp: new Date() }]);
-  }, []);
+  }, [gameMode]);
 
   const endPeek = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -1424,7 +1451,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
     setReactionEntries([]);
     setAiThinking(false); setWinner(null);
-    setChatMessages(LOBBY_MESSAGES);
+    // Keep chat history in multiplayer — Firestore subscription re-populates it.
+    // Only reset to lobby filler messages for solo mode.
+    if (!roomCodeRef.current) {
+      setChatMessages(LOBBY_MESSAGES);
+    }
   }, []);
 
   return (
