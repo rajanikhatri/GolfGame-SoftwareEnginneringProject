@@ -5,6 +5,7 @@ import { Flag, ChevronDown, Zap, Eye } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
+import { getStoredTableThemeId, getTableTheme } from '../lib/tableTheme';
 
 // ─── Match Banner ────────────────────────────────────────────────────────────
 function MatchBanner({ countdown }: { countdown: number }) {
@@ -1420,6 +1421,7 @@ export default function Game() {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
   const [peekActive, setPeekActive] = useState(true);
+  const [tableThemeId] = useState(() => getStoredTableThemeId());
   const p1 = players[0];
   const p2 = players[1];
   const p3 = players[2];
@@ -1445,6 +1447,7 @@ export default function Game() {
     playerId ? (reactionOrderByPlayerId.get(playerId) ?? null) : null
   );
   const localReactionOrder = getPlayerReactionOrder(myPlayerId || p1?.id);
+  const tableTheme = getTableTheme(tableThemeId);
 
   useEffect(() => {
     if (!peekActive) return;
@@ -2235,7 +2238,7 @@ export default function Game() {
         ref={gameRootRef}
         className="game-screen min-h-screen w-full overflow-hidden font-game relative"
         style={{
-          background: 'radial-gradient(ellipse at 50% 40%, #1565C0 0%, #0D47A1 25%, #0D2137 65%, #060D1B 100%)',
+          background: tableTheme.screenBackground,
           fontFamily: 'Nunito, sans-serif',
           display: 'flex', flexDirection: 'column',
         }}
@@ -2244,7 +2247,7 @@ export default function Game() {
       {/* Subtle grid pattern */}
       <div className="game-screen__pattern" style={{
         position: 'absolute', inset: 0,
-        backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)',
+        backgroundImage: `radial-gradient(circle, ${tableTheme.patternDot} 1px, transparent 1px)`,
         backgroundSize: '32px 32px',
         pointerEvents: 'none',
       }} />
@@ -2255,8 +2258,8 @@ export default function Game() {
         top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         width: 'var(--game-felt-width, 480px)', height: 'var(--game-felt-height, 360px)',
         borderRadius: '50%',
-        background: 'radial-gradient(ellipse, rgba(27,94,32,0.25) 0%, rgba(27,94,32,0.08) 60%, transparent 100%)',
-        border: '2px solid rgba(27,94,32,0.2)',
+        background: tableTheme.feltBackground,
+        border: `2px solid ${tableTheme.feltBorder}`,
         pointerEvents: 'none',
       }} />
 

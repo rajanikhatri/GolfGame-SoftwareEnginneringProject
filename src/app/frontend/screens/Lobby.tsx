@@ -1,10 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Send, Copy, Check, Wifi, Crown } from 'lucide-react';
+import { ArrowLeft, Send, Copy, Check, Wifi, Crown, Palette } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
 import { subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
 import { ensureAnonymousUser } from '../../database/firebase';
+import {
+  TABLE_THEMES,
+  getStoredTableThemeId,
+  setStoredTableThemeId,
+  type TableThemeId,
+} from '../lib/tableTheme';
 
 const AI_MESSAGES = [
   "Can't wait to destroy you all 😈",
@@ -45,7 +51,10 @@ export default function Lobby() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isHost, setIsHost] = useState(gameMode === 'solo');
   const [startError, setStartError] = useState<string | null>(null); // solo player is always "host"
+  const [selectedTableTheme, setSelectedTableTheme] = useState<TableThemeId>(() => getStoredTableThemeId());
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const themePickerRef = useRef<HTMLDivElement>(null);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
   // Redirect to home if there's no active game session
@@ -129,6 +138,19 @@ export default function Lobby() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  useEffect(() => {
+    if (!showThemePicker) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!themePickerRef.current?.contains(event.target as Node)) {
+        setShowThemePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [showThemePicker]);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(ROOM_CODE).catch(() => {});
     setCopied(true);
@@ -185,7 +207,14 @@ export default function Lobby() {
     setInputMsg('');
   };
 
+  const handleThemeSelect = (themeId: TableThemeId) => {
+    setSelectedTableTheme(themeId);
+    setStoredTableThemeId(themeId);
+    setShowThemePicker(false);
+  };
+
   const allReady = players.every(p => p.ready);
+  const activeTableTheme = TABLE_THEMES.find(theme => theme.id === selectedTableTheme) ?? TABLE_THEMES[0];
 
   return (
     <div
@@ -243,7 +272,7 @@ export default function Lobby() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-4 relative z-10">
+      <div className="flex items-center justify-between px-6 pt-6 pb-4 relative z-30">
         <button
           className="arcade-btn arcade-btn-red flex items-center gap-2 px-5 py-3"
           style={{ fontSize: 15, fontWeight: 800 }}
@@ -282,21 +311,74 @@ export default function Lobby() {
           )}
         </div>
 
-        <div style={{
-          background: 'rgba(30,136,229,0.2)',
-          border: '2px solid rgba(30,136,229,0.4)',
-          borderRadius: 12, padding: '8px 16px',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <Wifi size={16} color="#42A5F5" />
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#42A5F5', fontFamily: 'Nunito' }}>
-            {gameMode === 'solo' ? 'SOLO MODE' : 'ONLINE'}
-          </span>
+        <div className="lobby-header-tools">
+          <div className="lobby-header-status-row" ref={themePickerRef}>
+            <button
+              type="button"
+              className="lobby-theme-trigger"
+              aria-label="Open table theme options"
+              aria-expanded={showThemePicker}
+              onClick={() => setShowThemePicker(value => !value)}
+              style={{
+                ['--lobby-theme-trigger-accent' as string]: activeTableTheme.accent,
+              }}
+            >
+              <Palette size={15} />
+            </button>
+            <div style={{
+              background: 'rgba(30,136,229,0.2)',
+              border: '2px solid rgba(30,136,229,0.4)',
+              borderRadius: 12, padding: '8px 16px',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <Wifi size={16} color="#42A5F5" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#42A5F5', fontFamily: 'Nunito' }}>
+                {gameMode === 'solo' ? 'SOLO MODE' : 'ONLINE'}
+              </span>
+            </div>
+            {showThemePicker && (
+              <div className="lobby-header-theme-picker">
+                <div className="lobby-header-theme-picker__label">TABLE THEME</div>
+                <div className="lobby-theme-buttons" role="group" aria-label="Select table theme">
+                  {TABLE_THEMES.map(theme => {
+                    const isSelected = selectedTableTheme === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        className={`lobby-theme-button${isSelected ? ' lobby-theme-button--selected' : ''}`}
+                        aria-pressed={isSelected}
+                        onClick={() => handleThemeSelect(theme.id)}
+                        style={{
+                          ['--lobby-theme-button-glow' as string]: theme.optionGlow,
+                          ['--lobby-theme-button-accent' as string]: theme.accent,
+                        }}
+                      >
+                        {theme.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  className="lobby-theme-preview"
+                  style={{
+                    ['--lobby-theme-preview-bg' as string]: activeTableTheme.previewBackground,
+                  }}
+                >
+                  <div className="lobby-theme-preview__swatch" />
+                  <div className="lobby-theme-preview__copy">
+                    <div className="lobby-theme-preview__name">{activeTableTheme.name}</div>
+                    <div className="lobby-theme-preview__description">{activeTableTheme.description}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex gap-6 px-6 pb-6 relative z-10" style={{ minHeight: 'calc(100vh - 100px)' }}>
+      <div className="flex gap-6 px-6 pb-6 relative z-0" style={{ minHeight: 'calc(100vh - 100px)' }}>
 
         {/* Left: Player slots */}
         <div className="flex-1 flex flex-col gap-5">
