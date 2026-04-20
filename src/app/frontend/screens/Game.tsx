@@ -975,7 +975,7 @@ function PlayerCardGrid({
 
 // ─── Player Panel ─────────────────────────────────────────────────────────────
 function PlayerPanelComp({
-  player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking, score,
+  player, isActive, isYou, position, onCardClick, selectedForSwap, aiThinking,
   revealCards, powerSelectableCards, powerSelectedCards, powerConfirmCards, powerSwapGlowCardIds, powerModeActive, powerTone, powerGuideText, onPowerClick, reactionSelectable, onReactionClick, reactionSelected, reactionOrder, discardLandingCue, registerCardNode, cardAreaGlowStyle, peekHighlightCards,
 }: {
   player: Player;
@@ -985,7 +985,6 @@ function PlayerPanelComp({
   onCardClick?: (row: number, col: number) => void;
   selectedForSwap?: boolean;
   aiThinking: boolean;
-  score: number | string;
   revealCards?: GridSelection[];
   powerSelectableCards?: GridSelection[];
   powerSelectedCards?: OrderedGridSelection[];
@@ -1008,6 +1007,8 @@ function PlayerPanelComp({
   const hasPowerTargets = Boolean(powerSelectableCards && powerSelectableCards.length > 0);
   const hasPowerSelections = Boolean(powerSelectedCards && powerSelectedCards.length > 0);
   const hasPowerConfirmCards = Boolean(powerConfirmCards && powerConfirmCards.length > 0);
+  const hasPeekHighlights = Boolean(peekHighlightCards && peekHighlightCards.length > 0);
+  const shouldPadCardArea = hasPowerTargets || hasPowerSelections || hasPowerConfirmCards || hasPeekHighlights;
   const shouldDimForPower = Boolean(powerModeActive && !hasPowerTargets && !hasPowerSelections && !hasPowerConfirmCards);
   const powerAccent = powerTone ? POWER_ACCENTS[powerTone] : null;
   const showInstructionalPanelCue = Boolean(isYou && powerModeActive && powerGuideText && powerTone);
@@ -1017,7 +1018,6 @@ function PlayerPanelComp({
     position,
     isActive,
     isYou,
-    score,
     selectedForSwap: Boolean(selectedForSwap),
     handCount: countCardsInHand(player),
     hasPowerTargets,
@@ -1072,12 +1072,6 @@ function PlayerPanelComp({
             {player.name}
             {isActive && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4CAF50', animation: 'pulse-glow 1s infinite' }} />}
           </div>
-          <div className="score-badge" style={{ padding: '1px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Star size={9} fill="#FFC107" color="#FFC107" />
-            <span style={{ fontSize: 11, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>
-              {isYou ? score : '?'}
-            </span>
-          </div>
           {reactionOrder && (
             <div style={{
               padding: '3px 9px',
@@ -1103,7 +1097,7 @@ function PlayerPanelComp({
       <div className="game-player-panel__cards" style={{
         outline: hasPowerTargets && powerAccent ? `3px solid ${powerAccent.outline}` : 'none',
         borderRadius: 12,
-        padding: hasPowerTargets ? 6 : 0,
+        padding: shouldPadCardArea ? 8 : 0,
         transition: 'all 0.24s ease',
         position: 'relative',
         opacity: shouldDimForPower ? 0.56 : 1,
@@ -2523,7 +2517,14 @@ export default function Game() {
             onClick={() => setShowRulesModal(true)}
             aria-label="Open rules"
           >
-            i
+            <span className="game-header__info-item game-header__info-item--1">7 = Peek self</span>
+            <span className="game-header__info-sep game-header__info-sep--1" />
+            <span className="game-header__info-item game-header__info-item--2">8 = Spy opp</span>
+            <span className="game-header__info-sep game-header__info-sep--2" />
+            <span className="game-header__info-item game-header__info-item--3">K♠/♣ = -2</span>
+            <span className="game-header__info-sep game-header__info-sep--3" />
+            <span className="game-header__info-item game-header__info-item--4">★ = -1</span>
+            <span className="game-header__info-more">...</span>
           </button>
           {finalRound && (
             <div style={{
@@ -2584,7 +2585,6 @@ export default function Game() {
               position="top"
               selectedForSwap={false}
               aiThinking={aiThinking}
-              score={countCardsInHand(p3)}
               revealCards={buildRevealCards(2)}
               powerSelectableCards={buildSelectablePowerCards(2)}
               powerSelectedCards={buildSelectedPowerCards(2)}
@@ -2615,7 +2615,6 @@ export default function Game() {
               position="left"
               selectedForSwap={false}
               aiThinking={aiThinking}
-              score={countCardsInHand(p2)}
               revealCards={buildRevealCards(1)}
               powerSelectableCards={buildSelectablePowerCards(1)}
               powerSelectedCards={buildSelectedPowerCards(1)}
@@ -2665,7 +2664,6 @@ export default function Game() {
               position="right"
               selectedForSwap={false}
               aiThinking={aiThinking}
-              score={countCardsInHand(p4)}
               revealCards={buildRevealCards(3)}
               powerSelectableCards={buildSelectablePowerCards(3)}
               powerSelectedCards={buildSelectedPowerCards(3)}
@@ -2718,12 +2716,6 @@ export default function Game() {
               <span style={{ fontSize: 14, fontWeight: 900, color: '#FFC107', fontFamily: 'Nunito' }}>
                 ★ YOU
               </span>
-              <div className="score-badge" style={{ padding: '2px 10px' }}>
-                <Star size={10} fill="#FFC107" color="#FFC107" style={{ marginRight: 4 }} />
-                <span style={{ fontSize: 12, fontWeight: 900, color: '#3E2723', fontFamily: 'Nunito' }}>
-                  {calcVisibleScore(p1)} pts
-                </span>
-              </div>
               {localReactionOrder && (
                 <div style={{
                   padding: '4px 10px',
@@ -2914,35 +2906,6 @@ export default function Game() {
                 KNOCK
               </motion.button>
             )}
-
-            <div style={{
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 12, padding: '8px 16px',
-              fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.4)',
-              fontFamily: 'Nunito', textAlign: 'center',
-            }}>
-              {powerInteractionActive && pendingPower === '7' && '👁 Tap a face-down card to peek, or skip'}
-              {powerInteractionActive && pendingPower === '8' && '🕵️ Tap one opponent card to spy, or skip'}
-              {powerInteractionActive && pendingPower === '9' && powerSelections.length < 2 && '👀 Pick 2 cards from 2 different players'}
-              {powerInteractionActive && pendingPower === '9' && powerSelections.length === 2 && '👀 Optional swap: choose KEEP or SWAP'}
-              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 0 && '🔀 Tap any card to start a blind swap'}
-              {powerInteractionActive && pendingPower === '10' && powerSelections.length === 1 && '🔀 Tap a card from another player to complete the blind swap'}
-              {phase === 'power' && !isMyTurn && `⏳ ${players[currentPlayerIndex]?.name} is using power ${pendingPower}...`}
-              {phase === 'draw' && isMyTurn && '🎯 Draw a card to start your turn'}
-              {phase === 'swap' && isMyTurn && '🔄 Tap a card to swap, or discard'}
-              {phase === 'giveaway' && canGiveAway && '🎁 Choose one of your cards to give away'}
-              {phase === 'giveaway' && !canGiveAway && `🎁 ${giveawayGiverName} is giving a card away...`}
-              {reactionMode && (
-                !canReactThisWindow
-                  ? '🚫 You knocked, so you are out of match reactions'
-                  : localReactionOrder
-                  ? `✅ You were the ${formatOrdinal(localReactionOrder)} reactor`
-                  : submittedReactionCard
-                  ? '✅ Reaction submitted'
-                  : '⚡ Reaction window: tap any matching card now'
-              )}
-              {!reactionMode && !isMyTurn && phase !== 'power' && `⏳ Wait for ${players[currentPlayerIndex]?.name}...`}
             </div>
           </div>
         </div>
