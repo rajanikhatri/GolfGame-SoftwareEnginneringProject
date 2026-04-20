@@ -51,17 +51,28 @@ export default function Lobby() {
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isHost, setIsHost] = useState(gameMode === 'solo');
+  const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [selectedTableTheme, setSelectedTableTheme] = useState<TableThemeId>(() => getStoredTableThemeId());
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showRulesDetails, setShowRulesDetails] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const themePickerRef = useRef<HTMLDivElement>(null);
+  const seenPlayerIdsRef = useRef<Set<string>>(new Set());
+  const isFirstRoomUpdate = useRef(true);
+  const myUserIdRef = useRef<string | null>(null);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
   useEffect(() => {
     if (!gameMode) navigate('/');
   }, [gameMode, navigate]);
+
+  useEffect(() => {
+    if (gameMode !== 'multiplayer') return;
+    ensureAnonymousUser().then(user => {
+      myUserIdRef.current = user.uid;
+    });
+  }, [gameMode]);
 
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !roomCode) return;
@@ -91,16 +102,25 @@ export default function Lobby() {
         avatar: PLAYER_AVATARS[index] ?? '🎮',
         color: PLAYER_COLORS[index] ?? '#1E88E5',
         ready: player.ready,
-        isYou: player.name === playerName,
+        isYou: myUserIdRef.current ? player.id === myUserIdRef.current : player.name === playerName,
       }));
 
       setPlayers(updatedPlayers);
-      const myPlayer = room.players.find(player => player.name === playerName);
+      const myPlayer = room.players.find(player =>
+        myUserIdRef.current ? player.id === myUserIdRef.current : player.name === playerName
+      );
       setIsHost(Boolean(myPlayer) && myPlayer.id === room.hostId);
 
-      if (updatedPlayers.length > 1) {
-        const newest = room.players[room.players.length - 1];
-        addChatMessage({ playerId: newest.id, playerName: newest.name, message: 'Joined the room.' });
+      if (isFirstRoomUpdate.current) {
+        isFirstRoomUpdate.current = false;
+        room.players.forEach(player => seenPlayerIdsRef.current.add(player.id));
+      } else {
+        for (const player of room.players) {
+          if (!seenPlayerIdsRef.current.has(player.id)) {
+            seenPlayerIdsRef.current.add(player.id);
+            addChatMessage({ playerId: player.id, playerName: player.name, message: 'Joined the room.' });
+          }
+        }
       }
     });
 
@@ -164,13 +184,15 @@ export default function Lobby() {
   };
 
   const handleStartGame = async () => {
-    if (!isHost || !allReady) return;
+    if (!isHost || !allReady || isStarting) return;
 
     if (gameMode === 'multiplayer' && roomCode) {
+      setIsStarting(true);
+      setStartError(null);
       try {
-        setStartError(null);
         if (players.length < 2) {
           setStartError('Need at least 2 players to start a multiplayer game.');
+          setIsStarting(false);
           return;
         }
 
@@ -190,10 +212,12 @@ export default function Lobby() {
         const message = error instanceof Error ? error.message : 'Failed to start game';
         setStartError(message);
         console.error('Failed to start room:', error);
+        setIsStarting(false);
       }
       return;
     }
 
+    setIsStarting(true);
     initGame();
     setCountdown(3);
   };
@@ -482,20 +506,24 @@ export default function Lobby() {
         <div className="lobby-start-panel">
           <div className="lobby-start-panel__hint">{startHint}</div>
           <motion.button
-            whileTap={{ scale: isHost && allReady ? 0.97 : 1 }}
+            whileTap={{ scale: isHost && allReady && !isStarting ? 0.97 : 1 }}
             className="arcade-btn arcade-btn-green py-4"
             style={{
               width: 'min(100%, 360px)',
               fontSize: 20,
               fontWeight: 900,
-              opacity: isHost && allReady ? 1 : 0.58,
-              cursor: isHost && allReady ? 'pointer' : 'not-allowed',
+              opacity: isHost && allReady && !isStarting ? 1 : 0.58,
+              cursor: isHost && allReady && !isStarting ? 'pointer' : 'not-allowed',
             }}
             onClick={handleStartGame}
           >
             {!isHost
               ? 'WAITING FOR HOST'
-              : allReady ? 'START GAME' : 'WAITING FOR PLAYERS'}
+              : isStarting
+              ? 'STARTING...'
+              : allReady
+              ? 'START GAME'
+              : 'WAITING FOR PLAYERS'}
           </motion.button>
         </div>
 

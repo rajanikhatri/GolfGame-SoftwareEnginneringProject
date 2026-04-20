@@ -6,6 +6,7 @@ import { useGame, type Card, type Player, type PowerCardSelection } from '../../
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
 import { getStoredTableThemeId, getTableTheme } from '../lib/tableTheme';
+import { isPerfDebugEnabled } from '../lib/perfDebug';
 
 // ─── Match Banner ────────────────────────────────────────────────────────────
 function MatchBanner({ countdown }: { countdown: number }) {
@@ -558,10 +559,6 @@ interface PowerSwapAnimation {
   to: CardAnchor;
 }
 
-type PerfGlobal = typeof globalThis & {
-  __GOLF_DEBUG_PERF__?: boolean;
-};
-
 const EMPTY_GRID_SELECTIONS: GridSelection[] = [];
 const EMPTY_ORDERED_GRID_SELECTIONS: OrderedGridSelection[] = [];
 
@@ -604,18 +601,6 @@ function getReactionBadgeColors(order: number) {
     background: '#546E7A',
     boxShadow: '0 4px 12px rgba(84,110,122,0.42)',
   };
-}
-
-function isPerfDebugEnabled() {
-  if (!import.meta.env.DEV) return false;
-
-  const perfGlobal = globalThis as PerfGlobal;
-  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
-  const storageFlag =
-    typeof window !== 'undefined' &&
-    window.localStorage.getItem('golf:debug-perf') === '1';
-
-  return globalFlag || storageFlag;
 }
 
 function debugPerf(label: string, details?: Record<string, unknown>) {
