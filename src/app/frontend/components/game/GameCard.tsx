@@ -84,19 +84,8 @@ export function GameCard({
   };
 
   if (isEmptySlot && !showBack) {
-  return (
-    <div
-      style={{
-        ...containerStyle,
-        border: '2px dashed rgba(190,224,255,0.35)',
-        background: 'linear-gradient(145deg, rgba(18,47,94,0.22), rgba(26,90,150,0.14))',
-        boxShadow: 'inset 0 0 16px rgba(120,190,255,0.08)',
-      }}
-      className={`game-card game-card-empty ${className}`}
-      onClick={onClick}
-    />
-  );
-}
+    return null;
+  }
 
 if (showBack) {
   return (

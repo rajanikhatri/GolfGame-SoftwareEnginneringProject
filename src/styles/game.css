@@ -1545,8 +1545,8 @@
 
 .game-player-grid--bottom {
   display: grid;
-  grid-template-rows: repeat(2, auto);
-  grid-auto-columns: max-content;
+  grid-template-columns: repeat(2, max-content);
+  grid-auto-rows: auto;
   column-gap: var(--game-player-grid-col-gap, 6px);
   row-gap: var(--game-player-grid-row-gap, 6px);
   justify-content: center;

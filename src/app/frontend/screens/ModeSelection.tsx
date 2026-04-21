@@ -81,10 +81,21 @@ const inputStyle: React.CSSProperties = {
 };
 
 // --- Dark button style ---
-function DarkBtn({ onClick, children, style }: { onClick: () => void; children: React.ReactNode; style?: React.CSSProperties }) {
+function DarkBtn({
+  onClick,
+  children,
+  style,
+  disabled = false,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  disabled?: boolean;
+}) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         background: '#111',
         border: '2px solid #555',
@@ -93,7 +104,8 @@ function DarkBtn({ onClick, children, style }: { onClick: () => void; children: 
         fontWeight: 800,
         fontSize: 16,
         padding: '10px 28px',
-        cursor: 'pointer',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.7 : 1,
         fontFamily: 'Nunito, sans-serif',
         ...style,
       }}
@@ -171,6 +183,7 @@ export default function ModeSelection() {
   }
 
   async function handleJoinRoom(code: string) {
+    if (loading) return;
     const normalizedCode = normalizeRoomCode(code);
     if (!normalizedCode) {
       setError('Enter a valid room code to join.');
@@ -200,6 +213,7 @@ export default function ModeSelection() {
   }
 
   async function handleCreateRoom() {
+    if (loading) return;
     if (!roomNameInput.trim()) return;
     setLoading(true);
     setError('');
@@ -764,6 +778,7 @@ export default function ModeSelection() {
               <DarkBtn onClick={() => setStep('choose-action')} style={{ minWidth: 120 }}>BACK</DarkBtn>
               <DarkBtn
                 onClick={handleCreateRoom}
+                disabled={loading}
                 style={{ minWidth: 120, background: '#1565C0', border: '2px solid #1976D2', opacity: loading ? 0.7 : 1 }}
               >{loading ? 'CREATING...' : 'CREATE'}</DarkBtn>
             </div>

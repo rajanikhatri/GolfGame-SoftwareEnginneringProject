@@ -561,6 +561,7 @@ interface PowerSwapAnimation {
 
 const EMPTY_GRID_SELECTIONS: GridSelection[] = [];
 const EMPTY_ORDERED_GRID_SELECTIONS: OrderedGridSelection[] = [];
+const EMPTY_STYLE: CSSProperties = {};
 
 function formatOrdinal(value: number) {
   const mod100 = value % 100;
@@ -702,6 +703,7 @@ function PlayerCardGrid({
           {row.map((card, ci) => {
             const isPeeked = Boolean(revealCards?.some(selection => selection.row === ri && selection.col === ci));
             const isPeekRow = peekPhase && isYou && ri === 1;
+            if (!card) return null;
 
             // During peek phase bottom row: show card face-up by overriding faceUp
             const displayCard = (isPeekRow || isPeeked) && card
@@ -1139,7 +1141,7 @@ const MemoPlayerPanelComp = memo(PlayerPanelComp);
 
 // ─── Draw / Discard Piles ─────────────────────────────────────────────────────
 function PileArea({
-  drawPile, discardPile, drawnCard, phase, isMyTurn, showSoloChangeCue,
+  drawPile, discardPile, drawnCard, phase, isMyTurn, pileActionPending, showSoloChangeCue,
   onDraw, onTakeDiscard,
 }: {
   drawPile: Card[];
@@ -1147,15 +1149,18 @@ function PileArea({
   drawnCard: Card | null;
   phase: string;
   isMyTurn: boolean;
+  pileActionPending: boolean;
   showSoloChangeCue: boolean;
   onDraw: () => void;
   onTakeDiscard: () => void;
 }) {
-  const canDraw = isMyTurn && phase === 'draw';
+  const canDraw = isMyTurn && phase === 'draw' && !pileActionPending;
+  const canTakeDiscard = canDraw && discardPile.length > 0;
   const discardTop = discardPile[0];
 
   debugPerf('PileArea render', {
     canDraw,
+    pileActionPending,
     phase,
     drawPile: drawPile.length,
     discardPile: discardPile.length,
@@ -1245,7 +1250,8 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={onDraw}
+            onClick={canDraw ? onDraw : undefined}
+            aria-disabled={!canDraw}
             style={{ cursor: canDraw ? 'pointer' : 'default', position: 'relative' }}
           >
             {/* Back-facing stack layers */}
@@ -1317,8 +1323,9 @@ function PileArea({
           </span>
           <div
             className="card-pile"
-            onClick={onTakeDiscard}
-            style={{ cursor: canDraw && discardTop ? 'pointer' : 'default', position: 'relative' }}
+            onClick={canTakeDiscard ? onTakeDiscard : undefined}
+            aria-disabled={!canTakeDiscard}
+            style={{ cursor: canTakeDiscard ? 'pointer' : 'default', position: 'relative' }}
           >
             {discardPile.slice(1, 4).reverse().map((card, i) => (
               <div
@@ -1342,7 +1349,7 @@ function PileArea({
                   animate={{ scale: 1, y: 0, opacity: 1 }}
                   transition={{ type: 'spring', bounce: 0.4 }}
                 >
-                  <GameCard card={discardTop} size="lg" glowing={canDraw} />
+                  <GameCard card={discardTop} size="lg" glowing={canTakeDiscard} />
                 </motion.div>
               ) : (
                 <div style={{
@@ -1395,6 +1402,7 @@ export default function Game() {
     matchWindowActive, matchCountdown, aiThinking,
     winner, drawFromPile, takeFromDiscard, swapCard, discardDrawn, reactToDiscard, knock,
     reactionEntries,
+    pileActionPending,
     initGame, pendingPower, resolvePower, skipPower, disconnectedPlayerName, swapCountdown, endPeek,
     selectPower9Card, confirmPower9, usePower10, giveawayGiverId,
     powerFocusTargetId, setFocusTarget,
@@ -1406,7 +1414,7 @@ export default function Game() {
   const [showFinalBanner, setShowFinalBanner] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
-  const [peekActive, setPeekActive] = useState(true);
+  const [peekActive, setPeekActive] = useState(false);
   const [tableThemeId] = useState(() => getStoredTableThemeId());
   const p1 = players[0];
   const p2 = players[1];
@@ -1436,11 +1444,20 @@ export default function Game() {
   const tableTheme = getTableTheme(tableThemeId);
 
   useEffect(() => {
-    if (!peekActive) return;
+    if (phase === 'peek') {
+      setPeekTimeLeft(5);
+      setPeekActive(true);
+      return;
+    }
+    setPeekActive(false);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== 'peek' || !peekActive) return;
     if (peekTimeLeft === 0) { setPeekActive(false); endPeek(); return; }
     const t = setTimeout(() => setPeekTimeLeft(p => p - 1), 1000);
     return () => clearTimeout(t);
-  }, [peekTimeLeft, peekActive, endPeek]);
+  }, [peekTimeLeft, peekActive, endPeek, phase]);
 
   // Peeked card: { playerIndex, row, col }
   const [peekedCards, setPeekedCards] = useState<Array<{
@@ -2058,16 +2075,23 @@ export default function Game() {
   }, []);
 
   const handleDrawFromPile = useCallback(() => {
+    if (pileActionPending || phase !== 'draw' || !isMyTurn) return;
     if (isPerfDebugEnabled()) {
       drawPerfStartRef.current = performance.now();
       debugPerf('drawFromPile click', {
         phase,
         drawPile: drawPile.length,
         isMyTurn,
+        pileActionPending,
       });
     }
     drawFromPile();
-  }, [drawFromPile, drawPile.length, isMyTurn, phase]);
+  }, [drawFromPile, drawPile.length, isMyTurn, phase, pileActionPending]);
+
+  const handleTakeFromDiscard = useCallback(() => {
+    if (pileActionPending || phase !== 'draw' || !isMyTurn || discardPile.length === 0) return;
+    takeFromDiscard();
+  }, [discardPile.length, isMyTurn, phase, pileActionPending, takeFromDiscard]);
 
   useEffect(() => {
     if (!isPerfDebugEnabled() || drawPerfStartRef.current === null) return;
@@ -2188,8 +2212,8 @@ export default function Game() {
 
   // Card area only: glow on actor (gold) or target (blue). No effect on dimmed players.
   const getPlayerCardGlowStyle = (playerIndex: number): CSSProperties => {
-    if (!powerFocusActive) return {};
-    if (currentPlayerIndex === 0) return {};
+    if (!powerFocusActive) return EMPTY_STYLE;
+    if (currentPlayerIndex === 0) return EMPTY_STYLE;
     const isActing = playerIndex === currentPlayerIndex;
     const isTarget = powerFocusTargetId !== null && players[playerIndex]?.id === powerFocusTargetId;
     if (isActing) return {
@@ -2198,7 +2222,7 @@ export default function Game() {
     if (isTarget) return {
       boxShadow: '0 0 0 3px rgba(100, 200, 255, 0.84), 0 0 44px rgba(80, 160, 255, 0.5)',
     };
-    return {};
+    return EMPTY_STYLE;
   };
   const swapPowerCueSize = 68;
   const statusLabel = pendingPower === '7'
@@ -2755,9 +2779,10 @@ export default function Game() {
               drawnCard={drawnCard}
               phase={phase}
               isMyTurn={isMyTurn}
+              pileActionPending={pileActionPending}
               showSoloChangeCue={gameMode === 'solo'}
               onDraw={handleDrawFromPile}
-              onTakeDiscard={takeFromDiscard}
+              onTakeDiscard={handleTakeFromDiscard}
             />
           </DebugProfiler>
         </div>

@@ -124,6 +124,7 @@ interface GameContextType {
   currentPlayerIndex: number;
   drawnCard: Card | null;
   phase: GamePhase;
+  pileActionPending: boolean;
   finalRound: boolean;
   knockedBy: string | null;
   matchWindowActive: boolean;
@@ -408,6 +409,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [currentTurnPlayerId, setCurrentTurnPlayerId] = useState<string | null>(null);
   const [drawnCard,          setDrawnCard]          = useState<Card | null>(null);
   const [phase,              setPhase]              = useState<GamePhase>('draw');
+  const [pileActionPending,  setPileActionPending]  = useState(false);
   const [finalRound,         setFinalRound]         = useState(false);
   const [knockedBy,          setKnockedBy]          = useState<string | null>(null);
   const [matchWindowActive,  setMatchWindowActive]  = useState(false);
@@ -469,6 +471,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const isMyTurn = gameMode === 'solo'
     ? currentPlayerIndex === 0
     : currentTurnPlayerId === myPlayerId;
+
+  useEffect(() => {
+    if (!pileActionPending) return;
+    if (phase !== 'draw' || drawnCard !== null || !isMyTurn) {
+      setPileActionPending(false);
+    }
+  }, [pileActionPending, phase, drawnCard, isMyTurn]);
 
   // ── Multiplayer: Subscribe to Firestore game state ──────────────────────────
   useEffect(() => {
@@ -792,7 +801,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         let worstVal = state.drawnCard.value;
 
         cards.forEach((card, index) => {
-          if (index >= 4 || !card) return;
+          if (!card) return;
           const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
           const knownValue =
             card.faceUp ? card.value :
@@ -806,7 +815,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (swapIndex === -1) {
           cards.forEach((card, index) => {
-            if (index < 4 && card && !card.faceUp) {
+            if (card && !card.faceUp) {
               const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
               if (!memory || memory.cardId !== card.id || memory.confidence < 0.8) {
                 swapIndex = index;
@@ -932,6 +941,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const initGame = useCallback((roomPlayers?: Array<{ id: string; name: string }>) => {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
+    setPileActionPending(false);
     setPendingPower(null);
     const configs = roomPlayers
       ? roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }))
@@ -958,6 +968,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
+    setPileActionPending(false);
     setPendingPower(null);
     aiMemoryRef.current = {};
     const configs = roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }));
@@ -974,23 +985,58 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const drawFromPile = useCallback(() => {
     if (gameMode === 'multiplayer') {
-      syncDrawFromPile(roomCodeRef.current).catch(console.error);
+      if (phase !== 'draw' || currentTurnPlayerId !== myPlayerId || pileActionPending) return;
+      setPileActionPending(true);
+      syncDrawFromPile(roomCodeRef.current).catch(error => {
+        setPileActionPending(false);
+        console.error(error);
+      });
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
     const nextState = engineDrawFromPile(buildSoloEngineState(), 'p1');
     applySoloEngineState(nextState);
-  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
+  }, [
+    applySoloEngineState,
+    buildSoloEngineState,
+    currentPlayerIndex,
+    currentTurnPlayerId,
+    gameMode,
+    myPlayerId,
+    phase,
+    pileActionPending,
+  ]);
 
   const takeFromDiscard = useCallback(() => {
     if (gameMode === 'multiplayer') {
-      syncTakeFromDiscard(roomCodeRef.current).catch(console.error);
+      if (
+        phase !== 'draw' ||
+        currentTurnPlayerId !== myPlayerId ||
+        discardPileRef.current.length === 0 ||
+        pileActionPending
+      ) {
+        return;
+      }
+      setPileActionPending(true);
+      syncTakeFromDiscard(roomCodeRef.current).catch(error => {
+        setPileActionPending(false);
+        console.error(error);
+      });
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
     const nextState = engineTakeFromDiscard(buildSoloEngineState(), 'p1');
     applySoloEngineState(nextState);
-  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
+  }, [
+    applySoloEngineState,
+    buildSoloEngineState,
+    currentPlayerIndex,
+    currentTurnPlayerId,
+    gameMode,
+    myPlayerId,
+    phase,
+    pileActionPending,
+  ]);
 
   const skipPowerAction = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -1095,7 +1141,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
-    setPlayers(nextPlayers);
+    const resolvedPlayers = reuseStablePlayers(playersRef.current, nextPlayers);
+    setPlayers(resolvedPlayers);
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(state.currentPlayerIndex);
@@ -1110,7 +1157,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
     soloPendingGiveawayRef.current = state.pendingGiveaway;
-    playersRef.current = nextPlayers;
+    playersRef.current = resolvedPlayers;
     drawPileRef.current = state.drawPile as Card[];
     discardPileRef.current = state.discardPile as Card[];
     currentPlayerIndexRef.current = state.currentPlayerIndex;
@@ -1127,7 +1174,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         (best, [id, score]) => (score < best.score ? { id, score } : best),
         { id: '', score: Infinity },
       ).id;
-      setWinner(nextPlayers.find(player => player.id === winnerId) ?? null);
+      setWinner(resolvedPlayers.find(player => player.id === winnerId) ?? null);
       gameActiveRef.current = false;
     } else {
       setWinner(null);
@@ -1427,10 +1474,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [gameMode]);
 
   const endPeek = useCallback(() => {
+    if (phaseRef.current !== 'peek') return;
     if (gameMode === 'multiplayer') {
       syncEndPeek(roomCodeRef.current).catch(console.error);
     } else {
-      setPhase('draw');
+      setPhase(previousPhase => (previousPhase === 'peek' ? 'draw' : previousPhase));
     }
   }, [gameMode]);
 
@@ -1439,6 +1487,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (swapTimerRef.current) clearInterval(swapTimerRef.current);
     setSwapCountdown(null);
     gameActiveRef.current = false;
+    setPileActionPending(false);
     setPendingPower(null);
     aiMemoryRef.current = {};
     setGiveawayGiverId(null);
@@ -1466,7 +1515,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       myPlayerId, isMyTurn,
       players, setPlayers,
       drawPile, discardPile,
-      currentPlayerIndex, drawnCard, phase,
+      currentPlayerIndex, drawnCard, phase, pileActionPending,
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard, reactionEntries,

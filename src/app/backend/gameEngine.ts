@@ -213,15 +213,6 @@ function addCardToHand(cards: (Card | null)[], card: Card): (Card | null)[] {
   return nextCards;
 }
 
-function cloneCardForPenalty(card: Card, ownerId: string, timestamp: number): Card {
-  return {
-    ...card,
-    id: `${card.id}-penalty-${ownerId}-${timestamp}`,
-    // Once the exposed discard is taken into a hand, it should follow hand privacy again.
-    faceUp: false,
-  };
-}
-
 function removeCardFromHand(
   hands: PlayerHand[],
   playerId: string,
@@ -380,8 +371,10 @@ export function removePlayer(state: GameState, playerId: string): GameState {
 
 // ─── Phase: Peek ──────────────────────────────────────────────────────────────
 
-// Called after the 5-second peek timer ends on all clients
+// Called after the 5-second peek timer ends on all clients.
+// Ignore stale timer completions once the game has already advanced.
 export function endPeekPhase(state: GameState): GameState {
+  if (state.phase !== 'peek') return state;
   return { ...state, phase: 'draw' };
 }
 
