@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, ChevronDown, Zap, Eye, MessageSquare, Send } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
+import { compareReactionEntries } from '../../backend/gameEngine';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
 import { getStoredTableThemeId, getTableTheme } from '../lib/tableTheme';
@@ -1430,7 +1431,7 @@ export default function Game() {
     playerId &&
     playerId !== knockedBy
   );
-  const sortedReactionEntries = [...reactionEntries].sort((a, b) => a.timestamp - b.timestamp);
+  const sortedReactionEntries = [...reactionEntries].sort(compareReactionEntries);
   const reactionOrderByPlayerId = new Map<string, number>();
   sortedReactionEntries.forEach((reaction, index) => {
     if (!reactionOrderByPlayerId.has(reaction.playerId)) {

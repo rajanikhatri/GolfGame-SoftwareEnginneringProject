@@ -153,7 +153,8 @@ export async function syncDiscardDrawn(roomCode: string): Promise<void> {
   await applyAction(roomCode, state => discardDrawnCard(state, user.uid));
 }
 
-// Reaction: use Firestore server timestamp for fair timing
+// Reaction ordering is assigned inside the shared transaction so every client
+// resolves the window using the same server-mediated submission order.
 export async function syncReaction(
   roomCode: string,
   targetPlayerId: string,
@@ -162,9 +163,24 @@ export async function syncReaction(
   const user = await ensureAnonymousUser();
   const timestamp = Date.now();
 
-  await applyAction(roomCode, state =>
-    submitReaction(state, user.uid, targetPlayerId, cardIndex, timestamp)
-  );
+  await applyAction(roomCode, state => {
+    const nextServerOrder = Math.max(state.nextReactionOrder ?? 1, 1);
+    const nextState = submitReaction(
+      state,
+      user.uid,
+      targetPlayerId,
+      cardIndex,
+      timestamp,
+      nextServerOrder,
+    );
+
+    if (nextState === state) return state;
+
+    return {
+      ...nextState,
+      nextReactionOrder: nextServerOrder + 1,
+    };
+  });
 }
 
 export async function syncGiveAwayCard(

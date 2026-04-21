@@ -32,7 +32,8 @@ export interface ReactionEntry {
   playerId: string;
   targetPlayerId: string;  // whose card was clicked
   cardIndex: number;   // flat index in that player's hand
-  timestamp: number;   // ms since epoch — use Firestore serverTimestamp in sync layer
+  timestamp: number;   // client-side fallback for solo mode and legacy reactions
+  serverOrder?: number | null; // shared transaction-assigned order for multiplayer fairness
 }
 
 export interface GameState {
@@ -48,6 +49,7 @@ export interface GameState {
   lastDiscardedById: string | null;
   reactionWindowOpen: boolean;
   reactions: ReactionEntry[];
+  nextReactionOrder?: number;
   finalRound: boolean;
   knockedById: string | null;
   gameOver: boolean;
@@ -137,6 +139,7 @@ export function createInitialGameState(playerIds: string[]): GameState {
     lastDiscardedById: null,
     reactionWindowOpen: false,
     reactions: [],
+    nextReactionOrder: 1,
     finalRound: false,
     knockedById: null,
     gameOver: false,
@@ -654,6 +657,7 @@ export function submitReaction(
   targetPlayerId: string,
   cardIndex: number,
   timestamp: number,
+  serverOrder?: number | null,
 ): GameState {
   if (!state.reactionWindowOpen) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
@@ -663,9 +667,24 @@ export function submitReaction(
     ...state,
     reactions: [
       ...state.reactions,
-      { playerId: reactingPlayerId, targetPlayerId, cardIndex, timestamp },
+      { playerId: reactingPlayerId, targetPlayerId, cardIndex, timestamp, serverOrder: serverOrder ?? null },
     ],
   };
+}
+
+export function compareReactionEntries(a: ReactionEntry, b: ReactionEntry): number {
+  const aHasServerOrder = typeof a.serverOrder === 'number';
+  const bHasServerOrder = typeof b.serverOrder === 'number';
+
+  if (aHasServerOrder && bHasServerOrder && a.serverOrder !== b.serverOrder) {
+    return a.serverOrder - b.serverOrder;
+  }
+
+  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+  if (aHasServerOrder !== bHasServerOrder) return aHasServerOrder ? -1 : 1;
+  if (a.playerId !== b.playerId) return a.playerId.localeCompare(b.playerId);
+  if (a.targetPlayerId !== b.targetPlayerId) return a.targetPlayerId.localeCompare(b.targetPlayerId);
+  return a.cardIndex - b.cardIndex;
 }
 
 // Called when the 3-second reaction window closes
@@ -679,7 +698,7 @@ export function resolveReactionWindow(state: GameState): GameState {
   const discardedValue = state.lastDiscardedCard.value;
   const sorted = [...state.reactions]
     .filter(reaction => !isReactionBlockedByKnock(state, reaction.playerId, reaction.targetPlayerId))
-    .sort((a, b) => a.timestamp - b.timestamp);
+    .sort(compareReactionEntries);
 
   const winningReaction =
     sorted.find(reaction => {
@@ -708,7 +727,8 @@ export function resolveReactionWindow(state: GameState): GameState {
       reaction.playerId === winningReaction.playerId &&
       reaction.targetPlayerId === winningReaction.targetPlayerId &&
       reaction.cardIndex === winningReaction.cardIndex &&
-      reaction.timestamp === winningReaction.timestamp;
+      reaction.timestamp === winningReaction.timestamp &&
+      (reaction.serverOrder ?? null) === (winningReaction.serverOrder ?? null);
 
     const targetHand = hands.find(h => h.playerId === reaction.targetPlayerId);
     const selectedCard = targetHand?.cards[reaction.cardIndex] ?? null;
