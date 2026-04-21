@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, Zap, Trophy, Users, Copy, Check, LogOut, User } from 'lucide-react';
+import { Star, Zap, Trophy, Users, Copy, Check, LogOut, User, Globe, Lock } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
 import { usePlayerAuth } from '../../auth/AuthContext';
 import {
   createRoomWithRetries,
   joinRoomByCode,
   normalizeRoomCode,
+  subscribeToPublicRooms,
+  type FirebaseRoomDoc,
 } from '../../database/firebaseRooms';
 
 // --- Types ---
-type ModalStep = 'nickname' | 'room-list' | 'create-room' | 'waiting-room' | null;
+type ModalStep = 'nickname' | 'choose-action' | 'room-browser' | 'enter-code' | 'create-room' | 'waiting-room' | null;
 
 // --- Floating background card ---
 const FloatingShape = ({ style, children }: { style: React.CSSProperties; children: React.ReactNode }) => (
@@ -113,11 +115,14 @@ export default function ModeSelection() {
 
   // Create room state
   const [roomNameInput, setRoomNameInput] = useState('');
-  const [roomPassword, setRoomPassword] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [maxPlayers, setMaxPlayers] = useState<2 | 3 | 4>(4);
   const [createdRoomCode, setCreatedRoomCode] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  // Public room browser
+  const [publicRooms, setPublicRooms] = useState<FirebaseRoomDoc[]>([]);
 
   const [hoveredCard, setHoveredCard] = useState<'multi' | 'solo' | null>(null);
   const accountBarRef = useRef<HTMLDivElement | null>(null);
@@ -136,12 +141,18 @@ export default function ModeSelection() {
     return () => window.removeEventListener('mousedown', handlePointerDown);
   }, [profileMenuOpen]);
 
+  useEffect(() => {
+    if (step !== 'room-browser') return;
+    const unsub = subscribeToPublicRooms(setPublicRooms);
+    return () => unsub();
+  }, [step]);
+
   function closeModal() {
     setStep(null);
     setNickname('');
     setJoinRoomCode('');
     setRoomNameInput('');
-    setRoomPassword('');
+    setIsPrivate(false);
     setError('');
   }
 
@@ -152,20 +163,18 @@ export default function ModeSelection() {
     navigate('/lobby');
   }
 
-  // Step 1: confirm nickname
   function handleNicknameOk() {
     if (!nickname.trim()) return;
     setRoomNameInput(`${nickname.trim()}'s room`);
-    setStep('room-list');
+    setStep('choose-action');
   }
 
-  async function handleJoinByCode() {
-    const normalizedCode = normalizeRoomCode(joinRoomCode);
+  async function handleJoinRoom(code: string) {
+    const normalizedCode = normalizeRoomCode(code);
     if (!normalizedCode) {
       setError('Enter a valid room code to join.');
       return;
     }
-
     setLoading(true);
     setError('');
     try {
@@ -189,7 +198,6 @@ export default function ModeSelection() {
     }
   }
 
-  // Step 3: create room in Firebase
   async function handleCreateRoom() {
     if (!roomNameInput.trim()) return;
     setLoading(true);
@@ -198,7 +206,7 @@ export default function ModeSelection() {
       const name = nickname.trim();
       const { code } = await createRoomWithRetries(
         { name, avatar: '🎮', color: '#1E88E5', glowColor: 'rgba(30,136,229,0.7)' },
-        { roomName: roomNameInput.trim(), maxPlayers, password: roomPassword },
+        { roomName: roomNameInput.trim(), maxPlayers, isPrivate },
       );
       flushSync(() => {
         setCreatedRoomCode(code);
@@ -214,7 +222,6 @@ export default function ModeSelection() {
     }
   }
 
-  // Step 4: navigate to lobby
   function handleStartGame() {
     navigate('/lobby');
   }
@@ -604,64 +611,132 @@ export default function ModeSelection() {
           </Modal>
         )}
 
-        {/* STEP 2: Join With Room Code */}
-        {step === 'room-list' && (
+        {/* STEP 2: Choose Action */}
+        {step === 'choose-action' && (
           <Modal onClose={closeModal}>
-            <h2 style={{ fontSize: 26, fontWeight: 900, marginBottom: 20 }}>Join with room code</h2>
-            <p style={{ fontSize: 13, color: '#aaa', marginBottom: 14, lineHeight: 1.6 }}>
-              Enter the room code shared by the host. Players can only join multiplayer rooms by code now.
+            <h2 style={{ fontSize: 26, fontWeight: 900, marginBottom: 8 }}>Hey, {nickname}!</h2>
+            <p style={{ fontSize: 13, color: '#aaa', marginBottom: 24 }}>What would you like to do?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button
+                onClick={() => { setError(''); setStep('room-browser'); }}
+                style={{ background: 'linear-gradient(135deg, #1565C0, #42A5F5)', border: 'none', borderRadius: 10, color: 'white', fontWeight: 900, fontSize: 16, padding: '16px 20px', cursor: 'pointer', fontFamily: 'Nunito', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                <Globe size={20} /> Browse Public Rooms
+              </button>
+              <button
+                onClick={() => { setError(''); setJoinRoomCode(''); setStep('enter-code'); }}
+                style={{ background: 'linear-gradient(135deg, #6A1B9A, #AB47BC)', border: 'none', borderRadius: 10, color: 'white', fontWeight: 900, fontSize: 16, padding: '16px 20px', cursor: 'pointer', fontFamily: 'Nunito', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                <Lock size={20} /> Join with Room Code
+              </button>
+              <button
+                onClick={() => { setError(''); setStep('create-room'); }}
+                style={{ background: 'linear-gradient(135deg, #2E7D32, #66BB6A)', border: 'none', borderRadius: 10, color: 'white', fontWeight: 900, fontSize: 16, padding: '16px 20px', cursor: 'pointer', fontFamily: 'Nunito', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                + Create a Room
+              </button>
+            </div>
+          </Modal>
+        )}
+
+        {/* STEP 3a: Public Room Browser */}
+        {step === 'room-browser' && (
+          <Modal onClose={closeModal}>
+            <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>Public Rooms</h2>
+            <p style={{ fontSize: 13, color: '#aaa', marginBottom: 16 }}>Select a room to join instantly.</p>
+            {error && <div style={{ marginBottom: 12, color: '#e53935', fontSize: 13, fontWeight: 700 }}>{error}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto', marginBottom: 16 }}>
+              {publicRooms.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#888', padding: '32px 0', fontSize: 14 }}>
+                  No public rooms available.<br />Create one!
+                </div>
+              ) : (
+                publicRooms.map(room => (
+                  <div
+                    key={room.code}
+                    style={{ background: '#2a2a2a', border: '1px solid #444', borderRadius: 8, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15 }}>{room.roomName ?? room.code}</div>
+                      <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>
+                        {room.players.length}/{room.maxPlayers ?? 4} players · {room.code}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleJoinRoom(room.code)}
+                      disabled={loading}
+                      style={{ background: '#43A047', border: 'none', borderRadius: 6, color: 'white', fontWeight: 900, fontSize: 13, padding: '8px 16px', cursor: loading ? 'default' : 'pointer', fontFamily: 'Nunito', opacity: loading ? 0.7 : 1, whiteSpace: 'nowrap' }}
+                    >
+                      {loading ? 'JOINING...' : 'JOIN'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <DarkBtn onClick={() => setStep('choose-action')} style={{ flex: 1 }}>BACK</DarkBtn>
+              <DarkBtn onClick={() => { setError(''); setStep('create-room'); }} style={{ flex: 1, background: '#1565C0', border: '2px solid #1976D2' }}>+ CREATE</DarkBtn>
+            </div>
+          </Modal>
+        )}
+
+        {/* STEP 3b: Join by Private Code */}
+        {step === 'enter-code' && (
+          <Modal onClose={closeModal}>
+            <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 8 }}>Join with Code</h2>
+            <p style={{ fontSize: 13, color: '#aaa', marginBottom: 16, lineHeight: 1.6 }}>
+              Enter the private room code shared by the host.
             </p>
             <input
               style={{ ...inputStyle, marginBottom: 12, fontSize: 18, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', textAlign: 'center' }}
               placeholder="GOLF-1234"
               value={joinRoomCode}
-              onChange={e => {
-                setJoinRoomCode(normalizeRoomCode(e.target.value));
-                setError('');
-              }}
-              onKeyDown={e => e.key === 'Enter' && handleJoinByCode()}
+              onChange={e => { setJoinRoomCode(normalizeRoomCode(e.target.value)); setError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleJoinRoom(joinRoomCode)}
               autoFocus
             />
-            {error && (
-              <div style={{ marginBottom: 18, color: '#e53935', fontSize: 13, fontWeight: 700 }}>
-                {error}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 12 }}>
+            {error && <div style={{ marginBottom: 12, color: '#e53935', fontSize: 13, fontWeight: 700 }}>{error}</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <DarkBtn onClick={() => setStep('choose-action')} style={{ flex: 1 }}>BACK</DarkBtn>
               <button
-                onClick={handleJoinByCode}
+                onClick={() => handleJoinRoom(joinRoomCode)}
                 disabled={loading}
-                style={{ flex: 1, background: '#43A047', border: 'none', borderRadius: 8, color: 'white', fontWeight: 900, fontSize: 16, padding: '12px', cursor: loading ? 'default' : 'pointer', fontFamily: 'Nunito', opacity: loading ? 0.7 : 1 }}
+                style={{ flex: 2, background: '#43A047', border: 'none', borderRadius: 8, color: 'white', fontWeight: 900, fontSize: 16, padding: '12px', cursor: loading ? 'default' : 'pointer', fontFamily: 'Nunito', opacity: loading ? 0.7 : 1 }}
               >{loading ? 'JOINING...' : 'JOIN ROOM'}</button>
-              <button
-                onClick={() => setStep('create-room')}
-                style={{ flex: 1, background: '#1565C0', border: 'none', borderRadius: 8, color: 'white', fontWeight: 900, fontSize: 16, padding: '12px', cursor: 'pointer', fontFamily: 'Nunito' }}
-              >+ CREATE MATCH</button>
             </div>
           </Modal>
         )}
 
-        {/* STEP 3: Create Room */}
+        {/* STEP 4: Create Room */}
         {step === 'create-room' && (
           <Modal onClose={closeModal}>
             <h2 style={{ fontSize: 26, fontWeight: 900, marginBottom: 24 }}>Create room</h2>
-            <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 6 }}>Name Room</label>
+            <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 6 }}>Room Name</label>
             <input
               style={{ ...inputStyle, marginBottom: 16 }}
               value={roomNameInput}
               onChange={e => setRoomNameInput(e.target.value)}
             />
-            <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 6 }}>Password</label>
-            <input
-              style={{ ...inputStyle, marginBottom: 6 }}
-              type="password"
-              placeholder="Leave empty for public room"
-              value={roomPassword}
-              onChange={e => setRoomPassword(e.target.value)}
-            />
-            <p style={{ fontSize: 12, color: '#aaa', marginBottom: 20 }}>If you don't set a password this room will be public.</p>
+            <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 10 }}>Visibility</label>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              <button
+                onClick={() => setIsPrivate(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${!isPrivate ? '#42A5F5' : '#444'}`, background: !isPrivate ? 'rgba(66,165,245,0.15)' : '#111', color: !isPrivate ? '#42A5F5' : '#aaa', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'Nunito', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              >
+                <Globe size={16} /> Public
+              </button>
+              <button
+                onClick={() => setIsPrivate(true)}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: `2px solid ${isPrivate ? '#AB47BC' : '#444'}`, background: isPrivate ? 'rgba(171,71,188,0.15)' : '#111', color: isPrivate ? '#AB47BC' : '#aaa', fontWeight: 900, fontSize: 14, cursor: 'pointer', fontFamily: 'Nunito', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              >
+                <Lock size={16} /> Private
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: '#aaa', marginBottom: 20 }}>
+              {isPrivate ? 'Private rooms are invite-only. Share the room code with friends.' : 'Public rooms appear in the room browser for anyone to join.'}
+            </p>
             <label style={{ fontSize: 14, fontStyle: 'italic', fontWeight: 700, display: 'block', marginBottom: 10 }}>Max Players</label>
-            <div style={{ display: 'flex', gap: 20, marginBottom: 28 }}>
+            <div style={{ display: 'flex', gap: 20, marginBottom: 24 }}>
               {([2, 3, 4] as const).map(n => (
                 <label key={n} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 15 }}>
                   <input
@@ -675,43 +750,59 @@ export default function ModeSelection() {
                 </label>
               ))}
             </div>
-            <p style={{ fontSize: 12, color: '#aaa', marginBottom: 20 }}>Choose the maximum number of players in room.</p>
+            {error && <div style={{ marginBottom: 12, color: '#e53935', fontSize: 13, fontWeight: 700 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <DarkBtn onClick={handleCreateRoom} style={{ minWidth: 120 }}>CREATE</DarkBtn>
-              <DarkBtn onClick={() => setStep('room-list')} style={{ minWidth: 120 }}>BACK</DarkBtn>
+              <DarkBtn onClick={() => setStep('choose-action')} style={{ minWidth: 120 }}>BACK</DarkBtn>
+              <DarkBtn
+                onClick={handleCreateRoom}
+                style={{ minWidth: 120, background: '#1565C0', border: '2px solid #1976D2', opacity: loading ? 0.7 : 1 }}
+              >{loading ? 'CREATING...' : 'CREATE'}</DarkBtn>
             </div>
           </Modal>
         )}
 
-        {/* STEP 4: Waiting Room */}
+        {/* STEP 5: Waiting Room (host) */}
         {step === 'waiting-room' && (
           <Modal onClose={closeModal}>
-            <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 20 }}>
-              waiting for players in room:<br />
-              <span style={{ color: '#82B1FF' }}>{roomNameInput}</span>
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>
+                <span style={{ color: '#82B1FF' }}>{roomNameInput}</span>
+              </h2>
+              <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 900, background: isPrivate ? 'rgba(171,71,188,0.2)' : 'rgba(66,165,245,0.2)', border: `1px solid ${isPrivate ? '#AB47BC' : '#42A5F5'}`, color: isPrivate ? '#CE93D8' : '#90CAF9', display: 'flex', alignItems: 'center', gap: 4 }}>
+                {isPrivate ? <><Lock size={10} /> PRIVATE</> : <><Globe size={10} /> PUBLIC</>}
+              </span>
+            </div>
             <div style={{ background: '#2a2a2a', border: '1px solid #444', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 15 }}>
               {nickname} <span style={{ color: '#FFC107', fontSize: 12, marginLeft: 8 }}>(host)</span>
             </div>
             <p style={{ fontSize: 12, color: '#aaa', fontStyle: 'italic', marginBottom: 16 }}>
-              This room can contain max {maxPlayers} players
+              Max {maxPlayers} players · {isPrivate ? 'Share the code below to invite friends' : 'Visible in public room browser'}
             </p>
-            <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Room Code — share this with your friends:</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-              <input
-                readOnly
-                value={createdRoomCode}
-                style={{ ...inputStyle, fontSize: 18, fontWeight: 900, letterSpacing: '0.1em', textAlign: 'center' }}
-              />
-              <button
-                onClick={() => { navigator.clipboard.writeText(createdRoomCode); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
-                style={{ background: codeCopied ? '#2e7d32' : '#333', border: '1px solid #555', borderRadius: 6, color: 'white', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}
-              >
-                {codeCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
-              </button>
-            </div>
+            {isPrivate && (
+              <>
+                <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Room Code — share with friends:</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+                  <input
+                    readOnly
+                    value={createdRoomCode}
+                    style={{ ...inputStyle, fontSize: 18, fontWeight: 900, letterSpacing: '0.1em', textAlign: 'center' }}
+                  />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(createdRoomCode); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
+                    style={{ background: codeCopied ? '#2e7d32' : '#333', border: '1px solid #555', borderRadius: 6, color: 'white', padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}
+                  >
+                    {codeCopied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
+                  </button>
+                </div>
+              </>
+            )}
+            {!isPrivate && (
+              <div style={{ background: 'rgba(66,165,245,0.1)', border: '1px solid rgba(66,165,245,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 24, fontSize: 13, color: '#90CAF9', fontWeight: 700 }}>
+                Your room is live in the public browser. Players can join without a code.
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <DarkBtn onClick={() => setStep('room-list')} style={{ minWidth: 100 }}>BACK</DarkBtn>
+              <DarkBtn onClick={() => setStep('choose-action')} style={{ minWidth: 100 }}>BACK</DarkBtn>
               <DarkBtn
                 onClick={handleStartGame}
                 style={{ minWidth: 100, background: '#1565C0', border: '2px solid #1976D2' }}

@@ -40,6 +40,7 @@ export interface FirebaseRoomDoc {
   roomName?: string;
   maxPlayers?: number;
   password?: string;
+  isPrivate?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   gameState?: any;
 }
@@ -94,7 +95,7 @@ export async function getWaitingRooms(): Promise<FirebaseRoomDoc[]> {
 
 export async function createRoomWithRetries(
   profile: MultiplayerProfileInput,
-  options: { roomName?: string; maxPlayers?: number; password?: string } = {},
+  options: { roomName?: string; maxPlayers?: number; password?: string; isPrivate?: boolean } = {},
   retries = 10,
 ) {
   const user = await ensureAnonymousUser();
@@ -129,6 +130,7 @@ export async function createRoomWithRetries(
           roomName: options.roomName ?? `${profile.name}'s room`,
           maxPlayers: options.maxPlayers ?? 4,
           password: options.password ?? '',
+          isPrivate: options.isPrivate ?? false,
         } satisfies FirebaseRoomDoc);
       });
       return { code, playerId: user.uid };
@@ -329,6 +331,20 @@ export async function setRoomGameState<T extends Record<string, unknown>>(code: 
 export async function clearRoomGameState(code: string) {
   const ref = roomGameStateRef(code);
   await deleteDoc(ref);
+}
+
+// ─── Public room browser ─────────────────────────────────────────────────────
+
+export function subscribeToPublicRooms(
+  onRooms: (rooms: FirebaseRoomDoc[]) => void,
+): Unsubscribe {
+  const q = query(roomsCol, where('status', '==', 'waiting'));
+  return onSnapshot(q, snap => {
+    const rooms = snap.docs
+      .map(d => d.data() as FirebaseRoomDoc)
+      .filter(r => r.isPrivate !== true && (r.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT);
+    onRooms(rooms);
+  });
 }
 
 // ─── Room Chat ────────────────────────────────────────────────────────────────
