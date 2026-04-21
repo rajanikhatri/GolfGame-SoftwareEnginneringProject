@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, Star, RotateCcw, Home } from 'lucide-react';
+import { Trophy, Star, Home } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
 import { GameCard } from '../components/game/GameCard';
 import { Confetti } from '../components/game/Confetti';
@@ -13,7 +13,7 @@ const PLACE_LABELS = ['1ST PLACE', '2ND PLACE', '3RD PLACE', '4TH PLACE'];
 
 export default function EndGame() {
   const navigate = useNavigate();
-  const { players, winner, resetGame, initGame } = useGame();
+  const { players, winner, resetGame } = useGame();
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [animateRows, setAnimateRows] = useState(false);
 
@@ -32,13 +32,6 @@ export default function EndGame() {
 
   // Sort players by score (lowest first)
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
-
-  const handlePlayAgain = () => {
-    flushSync(() => {
-      initGame();
-    });
-    navigate('/game');
-  };
 
   const handleMenu = () => {
     flushSync(() => {
@@ -277,14 +270,6 @@ export default function EndGame() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
             >
-              <button
-                className="arcade-btn arcade-btn-green"
-                style={{ fontSize: 18, padding: '16px 36px', fontWeight: 900 }}
-                onClick={handlePlayAgain}
-              >
-                <RotateCcw size={18} style={{ marginRight: 8 }} />
-                PLAY AGAIN
-              </button>
               <button
                 className="arcade-btn arcade-btn-blue"
                 style={{ fontSize: 18, padding: '16px 36px', fontWeight: 900 }}

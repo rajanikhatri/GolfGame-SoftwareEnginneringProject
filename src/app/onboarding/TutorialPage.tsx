@@ -92,27 +92,131 @@ const tutorialSteps = [
     body: (
       <>
         <p>
-          After any card is discarded, a{' '}
-          <strong style={{ color: '#FFD600' }}>3-second window</strong> opens for
-          all players.
+          Every time a card is discarded, a{' '}
+          <strong style={{ color: '#FFD600' }}>3-second Matching Window</strong>{' '}
+          opens.
         </p>
-        <ul style={{ margin: '8px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <li>
-            Have a card with the <strong>same value</strong>? React fast to remove
-            it from your hand
-          </li>
-          <li>
-            <strong>Fastest player wins</strong> the match — slower players get a{' '}
-            <strong style={{ color: '#EF5350' }}>penalty card</strong>
-          </li>
-          <li>
-            <strong>Wrong card thrown</strong> ={' '}
-            <strong style={{ color: '#EF5350' }}>penalty card</strong> immediately
-          </li>
-        </ul>
-        <p style={{ marginTop: 8, color: 'rgba(255,210,100,0.9)' }}>
-          Taking from the discard pile signals your card — opponents may react
-          against you in the next window!
+        <p style={{ marginTop: 8 }}>
+          During that short window, any player can react if they think a card in
+          play matches the discarded value.
+        </p>
+      </>
+    ),
+    visual: 'reaction',
+  },
+  {
+    title: 'Matching Your Own Card',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          If the discarded card matches one of your own cards and you tap it in
+          time, that card is removed from your grid.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          You finish with <strong>one less card</strong>, which can help lower
+          your final score.
+        </p>
+      </>
+    ),
+    visual: 'match',
+  },
+  {
+    title: 'Matching Another Player’s Card',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          A card is discarded, and you think another player has that same value in
+          their grid. If you tap the correct card, their matching card is removed.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          Then giveaway starts. You must give that player one of your own cards, so
+          they go back to the same number of cards, and you finish with{' '}
+          <strong>one less card</strong>.
+        </p>
+      </>
+    ),
+    visual: 'match',
+  },
+  {
+    title: 'Multiple Players React',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          More than one player can react during the same Matching Window.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          The game checks who reacted first. The{' '}
+          <strong>fastest correct player wins</strong>, so even a correct choice is
+          too late if someone else tapped first.
+        </p>
+      </>
+    ),
+    visual: 'reaction',
+  },
+  {
+    title: 'Wrong Match (Your Card)',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          If you react with one of your own cards and it is the wrong match, that
+          card stays where it is.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          You then take <strong style={{ color: '#EF5350' }}>1 penalty card</strong>.
+          That means your hand gets bigger by one card.
+        </p>
+      </>
+    ),
+    visual: 'reaction',
+  },
+  {
+    title: 'Wrong Match (Another Player’s Card)',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          If you target another player&apos;s card and your guess is wrong, that card
+          is added to your hand.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          You also take <strong style={{ color: '#EF5350' }}>1 penalty card</strong>.
+          This is a stronger punishment because your hand grows even more.
+        </p>
+      </>
+    ),
+    visual: 'reaction',
+  },
+  {
+    title: 'Discard Risk',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          Taking a card from the discard pile tells everyone exactly what card you
+          picked up.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          That information can help other players guess your hand during the next
+          Matching Window.
+        </p>
+      </>
+    ),
+    visual: 'turn',
+  },
+  {
+    title: 'Knock Rule',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          A player who has already knocked cannot react during a Matching Window.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          Other players also <strong>cannot target the knocker</strong>.
         </p>
       </>
     ),
