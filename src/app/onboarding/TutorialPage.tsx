@@ -4,7 +4,6 @@ import {
   Eye,
   Flag,
   Grid3X3,
-  RotateCcw,
   Shuffle,
   Target,
   Trophy,
@@ -18,62 +17,168 @@ interface TutorialPageProps {
   onSkip: () => void;
 }
 
+// ─── Step definitions ─────────────────────────────────────────────────────────
+
 const tutorialSteps = [
   {
-    title: 'Game Objective',
+    title: 'Game Goal',
     icon: Target,
-    body: 'Your goal is to finish with the lowest score. Each card has a point value, so players try to replace high cards with lower cards.',
+    body: (
+      <p>
+        Golf is a <strong>memory card game</strong> where the{' '}
+        <strong>lowest total score wins</strong>. Your job is to replace high-value
+        cards in your hand with lower ones. King ♠/♣ ={' '}
+        <strong style={{ color: '#4CAF50' }}>−2 pts</strong>, Joker ★ ={' '}
+        <strong style={{ color: '#4CAF50' }}>−1 pt</strong>. Everything else is
+        face value.
+      </p>
+    ),
     visual: 'objective',
   },
   {
     title: 'Card Setup',
     icon: Grid3X3,
-    body: 'Each player starts with four cards arranged in a 2x2 grid. Most cards stay face down, so you need to remember what you have.',
+    body: (
+      <p>
+        Each player starts with <strong>4 cards</strong> arranged in a 2×2 grid.
+        All cards begin face-down — nobody can see any cards at the start of the
+        game.
+      </p>
+    ),
     visual: 'grid',
   },
   {
-    title: 'Turn Actions',
-    icon: Shuffle,
-    body: 'On your turn, draw from the deck or take the top discard. Then choose to swap it with one of your cards or discard it.',
-    visual: 'turn',
-  },
-  {
-    title: 'Memory Aspect',
+    title: 'Peek Phase',
     icon: Eye,
-    body: 'At the start, you get a short look at some cards. After that, memory matters because hidden cards can decide your final score.',
+    body: (
+      <>
+        <p>
+          When the game starts, you get{' '}
+          <strong style={{ color: '#FFD600' }}>5 seconds</strong> to peek at
+          your <strong>bottom 2 cards only</strong>. Your top 2 remain hidden.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          Use this time to plan which cards you want to replace first.
+        </p>
+      </>
+    ),
     visual: 'memory',
   },
   {
-    title: 'Power Cards: Peek & Spy',
+    title: 'Your Turn',
+    icon: Shuffle,
+    body: (
+      <>
+        <p>On your turn, choose one option:</p>
+        <ul style={{ margin: '8px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <li>
+            <strong>Draw from the deck</strong> — an unknown card nobody has seen
+          </li>
+          <li>
+            <strong>Take from the discard pile</strong> — a visible card, but{' '}
+            <strong style={{ color: '#EF5350' }}>everyone sees which card you picked</strong>
+          </li>
+        </ul>
+        <p style={{ marginTop: 8 }}>
+          After drawing, either swap it into your grid or discard it.
+        </p>
+      </>
+    ),
+    visual: 'turn',
+  },
+  {
+    title: 'Matching Window',
+    icon: Zap,
+    body: (
+      <>
+        <p>
+          After any card is discarded, a{' '}
+          <strong style={{ color: '#FFD600' }}>3-second window</strong> opens for
+          all players.
+        </p>
+        <ul style={{ margin: '8px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <li>
+            Have a card with the <strong>same value</strong>? React fast to remove
+            it from your hand
+          </li>
+          <li>
+            <strong>Fastest player wins</strong> the match — slower players get a{' '}
+            <strong style={{ color: '#EF5350' }}>penalty card</strong>
+          </li>
+          <li>
+            <strong>Wrong card thrown</strong> ={' '}
+            <strong style={{ color: '#EF5350' }}>penalty card</strong> immediately
+          </li>
+        </ul>
+        <p style={{ marginTop: 8, color: 'rgba(255,210,100,0.9)' }}>
+          Taking from the discard pile signals your card — opponents may react
+          against you in the next window!
+        </p>
+      </>
+    ),
+    visual: 'reaction',
+  },
+  {
+    title: 'Power Cards: Look',
     icon: Eye,
-    body: 'Drawing a 7 lets you secretly peek at one of your own face-down cards — useful for planning your swaps. Drawing an 8 lets you spy on one face-down card belonging to any opponent.',
+    body: (
+      <>
+        <p>When you draw and play a power card, you get a special ability:</p>
+        <ul style={{ margin: '8px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <li>
+            <strong style={{ color: '#FFD600' }}>7 —</strong> Secretly peek at
+            one of your own hidden cards
+          </li>
+          <li>
+            <strong style={{ color: '#FFD600' }}>8 —</strong> Secretly peek at
+            one hidden card from any opponent
+          </li>
+        </ul>
+      </>
+    ),
     visual: 'peek_spy',
   },
   {
     title: 'Power Cards: Swap',
     icon: ArrowLeftRight,
-    body: 'Drawing a 9 lets you swap one of your cards with a card from any opponent\'s hand — choose the highest one you\'ve seen. Drawing a 10 lets you swap any two cards within your own hand.',
+    body: (
+      <>
+        <ul style={{ paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <li>
+            <strong style={{ color: '#FFD600' }}>9 —</strong> Pick one of your
+            own cards and one from an opponent — you see both, then{' '}
+            <strong>choose to swap or keep</strong> them as-is. You can also
+            pick any two cards from an opponent's hand, see them, and swap.
+          </li>
+          <li>
+            <strong style={{ color: '#FFD600' }}>10 —</strong>{' '}
+            <strong>Blind swap</strong> — you do not see the cards before
+            swapping.{' '}
+            <span style={{ color: 'rgba(255,210,100,0.9)' }}>
+              Tip: best used to swap two of an opponent's cards blindly and
+              disrupt their hand.
+            </span>
+          </li>
+        </ul>
+      </>
+    ),
     visual: 'swap_power',
   },
   {
-    title: 'Reaction Window',
-    icon: Zap,
-    body: 'When any card is discarded, a brief reaction window opens. Non-knocking players can quickly swap one of their own cards with the discarded card. The fastest player wins the swap.',
-    visual: 'reaction',
-  },
-  {
-    title: 'Column Match & Giveaway',
-    icon: RotateCcw,
-    body: 'Two cards in the same column that share a value cancel out and score 0 together. As a bonus, you can then give one of those matched cards to any opponent — raising their score.',
-    visual: 'match',
-  },
-  {
-    title: 'Winning Condition',
+    title: 'Winning',
     icon: Trophy,
-    body: 'When a player knocks, the final round begins. At the end, all cards are revealed and the lowest total score wins.',
+    body: (
+      <p>
+        When a player <strong>knocks</strong>, the final round plays out and all
+        cards are revealed.{' '}
+        <strong>Lowest total score wins!</strong>
+      </p>
+    ),
     visual: 'win',
   },
 ];
+
+// ─── Step visuals ─────────────────────────────────────────────────────────────
 
 function StepVisual({ type }: { type: string }) {
   if (type === 'grid' || type === 'memory' || type === 'match') {
@@ -92,7 +197,12 @@ function StepVisual({ type }: { type: string }) {
       <div className="tutorial-card-grid">
         <div className="tutorial-mini-card face-down">?</div>
         <div className="tutorial-mini-card face-down">?</div>
-        <div className="tutorial-mini-card face-up" style={{ outline: '2px solid #42A5F5', outlineOffset: 2 }}>4</div>
+        <div
+          className="tutorial-mini-card face-up"
+          style={{ outline: '2px solid #42A5F5', outlineOffset: 2 }}
+        >
+          4
+        </div>
         <div className="tutorial-mini-card face-down">?</div>
       </div>
     );
@@ -101,9 +211,19 @@ function StepVisual({ type }: { type: string }) {
   if (type === 'swap_power') {
     return (
       <div className="tutorial-flow-visual">
-        <div className="tutorial-mini-card face-up" style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>Q</div>
+        <div
+          className="tutorial-mini-card face-up"
+          style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
+        >
+          Q
+        </div>
         <ArrowLeftRight size={24} style={{ color: '#FFD600', flexShrink: 0 }} />
-        <div className="tutorial-mini-card face-up" style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>2</div>
+        <div
+          className="tutorial-mini-card face-up"
+          style={{ fontSize: 18, width: 44, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
+        >
+          2
+        </div>
       </div>
     );
   }
@@ -113,7 +233,7 @@ function StepVisual({ type }: { type: string }) {
       <div className="tutorial-score-card">
         <Zap size={36} color="#FFD600" />
         <span>React fast!</span>
-        <strong>Quick swap</strong>
+        <strong>3 seconds</strong>
       </div>
     );
   }
@@ -140,6 +260,7 @@ function StepVisual({ type }: { type: string }) {
     );
   }
 
+  // default: 'objective'
   return (
     <div className="tutorial-score-card">
       <Flag size={36} />
@@ -148,6 +269,8 @@ function StepVisual({ type }: { type: string }) {
     </div>
   );
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function TutorialPage({ onFinish, onSkip }: TutorialPageProps) {
   const [stepIndex, setStepIndex] = useState(0);
@@ -171,8 +294,8 @@ export function TutorialPage({ onFinish, onSkip }: TutorialPageProps) {
 
       <main className="tutorial-panel">
         <div className="tutorial-top-row">
-          <button className="tutorial-text-button" onClick={onSkip}>
-            Skip to Sign In
+          <button className="tutorial-skip-btn" onClick={onSkip}>
+            Skip for now
           </button>
           <span>
             Step {stepIndex + 1} of {tutorialSteps.length}
@@ -194,7 +317,7 @@ export function TutorialPage({ onFinish, onSkip }: TutorialPageProps) {
           </div>
           <div className="tutorial-copy">
             <h1>{step.title}</h1>
-            <p>{step.body}</p>
+            {step.body}
           </div>
           <StepVisual type={step.visual} />
         </section>
