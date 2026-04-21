@@ -7,6 +7,7 @@ import { useGame } from '../../backend/GameContext';
 import { usePlayerAuth } from '../../auth/AuthContext';
 import {
   createRoomWithRetries,
+  isPublicRoomNameTaken,
   joinRoomByCode,
   normalizeRoomCode,
   subscribeToPublicRooms,
@@ -203,6 +204,14 @@ export default function ModeSelection() {
     setLoading(true);
     setError('');
     try {
+      if (!isPrivate) {
+        const taken = await isPublicRoomNameTaken(roomNameInput.trim());
+        if (taken) {
+          setError('A public room with this name already exists. Choose a different name.');
+          setLoading(false);
+          return;
+        }
+      }
       const name = nickname.trim();
       const { code } = await createRoomWithRetries(
         { name, avatar: '🎮', color: '#1E88E5', glowColor: 'rgba(30,136,229,0.7)' },

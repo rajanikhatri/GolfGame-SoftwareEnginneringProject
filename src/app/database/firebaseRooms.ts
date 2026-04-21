@@ -54,7 +54,7 @@ export interface MultiplayerProfileInput {
 
 const roomsCol = collection(firebaseDb, 'rooms');
 const leaderboardCol = collection(firebaseDb, 'leaderboard');
-const ROOM_MATCH_RETIRE_LIMIT = 3;
+const ROOM_MATCH_RETIRE_LIMIT = 1;
 
 function roomRef(code: string) {
   return doc(roomsCol, normalizeRoomCode(code));
@@ -335,6 +335,21 @@ export async function clearRoomGameState(code: string) {
 
 // ─── Public room browser ─────────────────────────────────────────────────────
 
+export async function isPublicRoomNameTaken(name: string): Promise<boolean> {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const q = query(roomsCol, where('roomName', '==', trimmed));
+  const snap = await getDocs(q);
+  return snap.docs.some(d => {
+    const room = d.data() as FirebaseRoomDoc;
+    return (
+      room.isPrivate !== true &&
+      room.status !== 'ended' &&
+      (room.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT
+    );
+  });
+}
+
 export function subscribeToPublicRooms(
   onRooms: (rooms: FirebaseRoomDoc[]) => void,
 ): Unsubscribe {
@@ -342,7 +357,8 @@ export function subscribeToPublicRooms(
   return onSnapshot(q, snap => {
     const rooms = snap.docs
       .map(d => d.data() as FirebaseRoomDoc)
-      .filter(r => r.isPrivate !== true && (r.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT);
+      .filter(r => r.isPrivate !== true && (r.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT)
+      .sort((a, b) => b.createdAt - a.createdAt); // newest first
     onRooms(rooms);
   });
 }
