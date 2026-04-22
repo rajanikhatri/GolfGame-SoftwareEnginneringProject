@@ -192,16 +192,25 @@ export async function joinRoomByCode(code: string, profile: MultiplayerProfileIn
 
 export async function leaveRoomByCode(code: string) {
   const user = await ensureAnonymousUser();
-  const ref = roomRef(code);
+  await removePlayerFromRoom(code, user.uid);
+}
+
+export async function removePlayerFromRoom(code: string, playerId: string): Promise<void> {
+  const normalized = normalizeRoomCode(code);
+  const ref = roomRef(normalized);
+  const stateRef = roomGameStateRef(normalized);
 
   await runTransaction(firebaseDb, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) return;
     const room = snap.data() as FirebaseRoomDoc;
-    const remaining = room.players.filter((p) => p.id !== user.uid);
+    const remaining = room.players.filter((p) => p.id !== playerId);
+
+    if (remaining.length === room.players.length) return;
 
     if (remaining.length === 0) {
       tx.delete(ref);
+      tx.delete(stateRef);
       return;
     }
 

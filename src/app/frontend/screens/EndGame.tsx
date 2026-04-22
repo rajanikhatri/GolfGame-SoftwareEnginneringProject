@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Star, Home } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
@@ -13,9 +12,10 @@ const PLACE_LABELS = ['1ST PLACE', '2ND PLACE', '3RD PLACE', '4TH PLACE'];
 
 export default function EndGame() {
   const navigate = useNavigate();
-  const { players, winner, resetGame } = useGame();
+  const { gameMode, players, winner, resetGame, leaveMultiplayerGame } = useGame();
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [animateRows, setAnimateRows] = useState(false);
+  const [menuPending, setMenuPending] = useState(false);
 
   useEffect(() => {
     if (!winner || players.length === 0) {
@@ -33,11 +33,20 @@ export default function EndGame() {
   // Sort players by score (lowest first)
   const sortedPlayers = [...players].sort((a, b) => a.score - b.score);
 
-  const handleMenu = () => {
-    flushSync(() => {
-      resetGame();
-    });
-    navigate('/');
+  const handleMenu = async () => {
+    if (menuPending) return;
+    setMenuPending(true);
+
+    try {
+      if (gameMode === 'multiplayer') {
+        await leaveMultiplayerGame();
+      } else {
+        resetGame();
+      }
+      navigate('/');
+    } finally {
+      setMenuPending(false);
+    }
   };
 
   return (
@@ -273,7 +282,8 @@ export default function EndGame() {
               <button
                 className="arcade-btn arcade-btn-blue"
                 style={{ fontSize: 18, padding: '16px 36px', fontWeight: 900 }}
-                onClick={handleMenu}
+                disabled={menuPending}
+                onClick={() => { void handleMenu(); }}
               >
                 <Home size={18} style={{ marginRight: 8 }} />
                 MAIN MENU

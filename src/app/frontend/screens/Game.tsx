@@ -1396,13 +1396,14 @@ export default function Game() {
     powerFocusTargetId, setFocusTarget,
     peekRevealCard, setPeekRevealCard,
     powerCueCard, setPowerCueCard,
-    chatMessages, sendChat,
+    chatMessages, sendChat, resetGame, leaveMultiplayerGame,
   } = useGame();
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [peekTimeLeft, setPeekTimeLeft] = useState(5);
   const [peekActive, setPeekActive] = useState(false);
+  const [exitPending, setExitPending] = useState(false);
   const [tableThemeId] = useState(() => getStoredTableThemeId());
   const p1 = players[0];
   const p2 = players[1];
@@ -1596,6 +1597,33 @@ export default function Game() {
       setSubmittedReactionCard(null);
     }
   }, [matchWindowActive]);
+
+  useEffect(() => {
+    const activePlayerIds = new Set(players.map(player => player.id));
+    setSubmittedReactionCard(previous => (
+      previous && activePlayerIds.has(previous.playerId) ? previous : null
+    ));
+    setPowerSelections(previous => {
+      const filtered = previous.filter(selection => activePlayerIds.has(selection.playerId));
+      return filtered.length === previous.length ? previous : filtered;
+    });
+  }, [players]);
+
+  const handleExit = useCallback(async () => {
+    if (exitPending) return;
+    setExitPending(true);
+
+    try {
+      if (gameMode === 'multiplayer') {
+        await leaveMultiplayerGame();
+      } else {
+        resetGame();
+      }
+      navigate('/');
+    } finally {
+      setExitPending(false);
+    }
+  }, [exitPending, gameMode, leaveMultiplayerGame, navigate, resetGame]);
 
   const selectedSwapCueActive =
     phase === 'power' &&
@@ -2667,7 +2695,8 @@ export default function Game() {
           <button
             className="arcade-btn arcade-btn-red"
             style={{ fontSize: 12, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
-            onClick={() => navigate('/')}
+            disabled={exitPending}
+            onClick={() => { void handleExit(); }}
           >
             EXIT
           </button>

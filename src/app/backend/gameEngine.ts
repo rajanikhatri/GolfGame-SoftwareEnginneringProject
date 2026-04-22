@@ -333,6 +333,7 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   const idx = state.playerOrder.indexOf(playerId);
   const newPlayerOrder = state.playerOrder.filter(id => id !== playerId);
   const newHands = state.hands.filter(h => h.playerId !== playerId);
+  const isActivePlayer = (id: string) => newPlayerOrder.includes(id);
 
   // Only 1 player left — end game immediately
   if (newPlayerOrder.length <= 1) {
@@ -350,14 +351,77 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   // If it was the disconnected player's turn, reset to draw phase for next player
   const wasTheirTurn = idx === state.currentPlayerIndex;
 
+  const nextKnockedById = state.knockedById && isActivePlayer(state.knockedById)
+    ? state.knockedById
+    : null;
+  const nextFinalRound = nextKnockedById ? state.finalRound : false;
+
+  const nextReactions = state.reactions.filter(reaction => (
+    isActivePlayer(reaction.playerId) && isActivePlayer(reaction.targetPlayerId)
+  ));
+
+  const nextPower9Selection = (state.power9Selection ?? []).filter(selection => (
+    isActivePlayer(selection.playerId)
+  ));
+
+  const nextPendingGiveaway = state.pendingGiveaway &&
+    isActivePlayer(state.pendingGiveaway.giverId) &&
+    isActivePlayer(state.pendingGiveaway.receiverId)
+      ? state.pendingGiveaway
+      : null;
+
+  const shouldAbortReactionWindow = state.reactionWindowOpen || state.phase === 'react';
+  const shouldAbortGiveaway = state.phase === 'giveaway' || nextPendingGiveaway === null && state.pendingGiveaway !== null;
+  const shouldResumeToSafeDraw = shouldAbortReactionWindow || shouldAbortGiveaway;
+  const safeDrawIndex = wasTheirTurn ? newIndex : (newIndex + 1) % newPlayerOrder.length;
+
+  const nextScores = Object.fromEntries(
+    Object.entries(state.scores).filter(([id]) => isActivePlayer(id)),
+  );
+
+  if (shouldResumeToSafeDraw) {
+    return {
+      ...state,
+      playerOrder: newPlayerOrder,
+      hands: newHands,
+      scores: nextScores,
+      currentPlayerIndex: safeDrawIndex,
+      phase: 'draw',
+      drawnCard: null,
+      pendingPower: null,
+      lastDiscardedCard: null,
+      lastDiscardedById: null,
+      reactionWindowOpen: false,
+      reactions: [],
+      finalRound: nextFinalRound,
+      knockedById: nextKnockedById,
+      power9Selection: null,
+      powerFocusTargetId: null,
+      peekRevealCard: null,
+      powerCueCard: null,
+      pendingGiveaway: null,
+    };
+  }
+
   return {
     ...state,
     playerOrder: newPlayerOrder,
     hands: newHands,
+    scores: nextScores,
     currentPlayerIndex: newIndex,
+    finalRound: nextFinalRound,
+    knockedById: nextKnockedById,
     phase: wasTheirTurn ? 'draw' : state.phase,
     drawnCard: wasTheirTurn ? null : state.drawnCard,
     pendingPower: wasTheirTurn ? null : state.pendingPower,
+    lastDiscardedById: state.lastDiscardedById === playerId ? null : state.lastDiscardedById,
+    reactionWindowOpen: false,
+    reactions: nextReactions,
+    power9Selection: wasTheirTurn ? null : (nextPower9Selection.length > 0 ? nextPower9Selection : null),
+    powerFocusTargetId: wasTheirTurn || state.powerFocusTargetId === playerId ? null : state.powerFocusTargetId,
+    peekRevealCard: wasTheirTurn || state.peekRevealCard?.playerId === playerId ? null : state.peekRevealCard,
+    powerCueCard: wasTheirTurn || state.powerCueCard?.playerId === playerId ? null : state.powerCueCard,
+    pendingGiveaway: nextPendingGiveaway,
   };
 }
 
@@ -649,6 +713,8 @@ export function submitReaction(
   serverOrder?: number | null,
 ): GameState {
   if (!state.reactionWindowOpen) return state;
+  if (!state.playerOrder.includes(reactingPlayerId)) return state;
+  if (!state.playerOrder.includes(targetPlayerId)) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
   if (isReactionBlockedByKnock(state, reactingPlayerId, targetPlayerId)) return state;
 
@@ -685,7 +751,9 @@ export function resolveReactionWindow(state: GameState): GameState {
   }
 
   const discardedValue = state.lastDiscardedCard.value;
+  const activePlayerIds = new Set(state.playerOrder);
   const sorted = [...state.reactions]
+    .filter(reaction => activePlayerIds.has(reaction.playerId) && activePlayerIds.has(reaction.targetPlayerId))
     .filter(reaction => !isReactionBlockedByKnock(state, reaction.playerId, reaction.targetPlayerId))
     .sort(compareReactionEntries);
 
@@ -798,6 +866,14 @@ export function giveAwayCard(
 ): GameState {
   if (state.phase !== 'giveaway' || !state.pendingGiveaway) return state;
   if (state.pendingGiveaway.giverId !== giverId) return state;
+  if (!state.hands.some(hand => hand.playerId === state.pendingGiveaway.receiverId)) {
+    return advanceTurn({
+      ...state,
+      pendingGiveaway: null,
+      reactionWindowOpen: false,
+      reactions: [],
+    });
+  }
 
   const giverHand = state.hands.find(h => h.playerId === giverId);
   const selectedCard = giverHand?.cards[giverCardIndex] ?? null;
