@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInAnonymously,
   signInWithEmailAndPassword,
   signOut,
@@ -39,13 +40,17 @@ export const firebaseRtdb = getDatabase(firebaseApp);
 
 // ─── Presence (Realtime Database) ─────────────────────────────────────────────
 
+export type PresenceCleanup = () => Promise<void>;
+
 // Call when a player enters the game. Returns a cleanup function to call on leave.
-export async function registerPresence(roomCode: string, playerId: string): Promise<() => void> {
+export async function registerPresence(roomCode: string, playerId: string): Promise<PresenceCleanup> {
   const presenceRef = ref(firebaseRtdb, `presence/${roomCode}/${playerId}`);
   await set(presenceRef, true);
   // Firebase server auto-removes this node if the client disconnects (crash, close tab, etc.)
   await onDisconnect(presenceRef).remove();
-  return () => remove(presenceRef);
+  return async () => {
+    await remove(presenceRef);
+  };
 }
 
 // Subscribe to who is online in a room. Calls back with array of online player IDs.
@@ -125,6 +130,10 @@ export async function loginWithEmail(email: string, password: string) {
   const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
   const profile = await upsertUserProfile(cred.user);
   return { user: cred.user, profile };
+}
+
+export async function sendPasswordReset(email: string) {
+  await sendPasswordResetEmail(firebaseAuth, email);
 }
 
 export async function logoutFirebaseUser() {

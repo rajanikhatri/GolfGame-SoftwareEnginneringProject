@@ -6,6 +6,7 @@ import {
   logoutFirebaseUser,
   onFirebaseAuthChanged,
   registerWithEmail,
+  sendPasswordReset,
   type PlayerAccountProfile,
 } from '../database/firebase';
 
@@ -15,6 +16,7 @@ interface AuthContextType {
   loading: boolean;
   register: (input: { email: string; password: string; displayName: string }) => Promise<void>;
   login: (input: { email: string; password: string }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -75,6 +77,9 @@ export function PlayerAuthProvider({ children }: { children: React.ReactNode }) 
       } finally {
         setLoading(false);
       }
+    },
+    forgotPassword: async (email) => {
+      await sendPasswordReset(email);
     },
     logout: async () => {
       setLoading(true);

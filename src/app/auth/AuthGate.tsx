@@ -1,20 +1,44 @@
 import { useState } from 'react';
 import { usePlayerAuth } from './AuthContext';
-import { LogOut } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
+function getAuthErrorMessage(error: unknown, mode: 'login' | 'register') {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+  if (mode === 'login' && (message.includes('invalid-credential') || message.includes('wrong-password') || message.includes('invalid login credentials'))) {
+    return 'Incorrect email or password. If you forgot it, click FORGOT PASSWORD? to reset it.';
+  }
+
+  if (mode === 'register' && message.includes('email-already-in-use')) {
+    return 'That email is already registered. Try logging in or reset your password.';
+  }
+
+  if (message.includes('invalid-email')) {
+    return 'Please enter a valid email address.';
+  }
+
+  if (message.includes('weak-password')) {
+    return 'Password is too weak. Use at least 6 characters.';
+  }
+
+  return error instanceof Error ? error.message : 'Authentication failed.';
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, loading, login, register, logout } = usePlayerAuth();
+  const { user, loading, login, register, forgotPassword } = usePlayerAuth();
   const authenticatedUser = user && !user.isAnonymous ? user : null;
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   if (loading && !authenticatedUser) {
     return (
@@ -26,57 +50,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (authenticatedUser) {
-    return (
-      <>
-        <div style={{
-          position: 'fixed',
-          top: 12,
-          left: 14,
-          zIndex: 200,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <span style={{
-            background: 'rgba(0,0,0,0.45)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            borderRadius: 999,
-            padding: '6px 12px',
-            color: 'white',
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: 'Nunito, sans-serif',
-          }}>
-            {profile?.displayName ?? authenticatedUser.email}
-          </span>
-          <button
-            onClick={logout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              background: 'rgba(229,57,53,0.8)',
-              border: '1px solid rgba(229,57,53,0.5)',
-              borderRadius: 999,
-              padding: '6px 12px',
-              color: 'white',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontFamily: 'Nunito, sans-serif',
-            }}
-          >
-            <LogOut size={12} /> LOGOUT
-          </button>
-        </div>
-        {children}
-      </>
-    );
-  }
+  if (authenticatedUser) return <>{children}</>;
 
   const submit = async () => {
     setError(null);
+    setMessage(null);
     const cleanedEmail = normalizeEmail(email);
     if (!cleanedEmail || !password.trim()) {
       setError('Email and password are required.');
@@ -102,7 +80,27 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         });
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Authentication failed.';
+      setError(getAuthErrorMessage(e, mode));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setMessage(null);
+    const cleanedEmail = normalizeEmail(email);
+    if (!cleanedEmail) {
+      setError('Enter your email address first to reset your password.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await forgotPassword(cleanedEmail);
+      setMessage('Password reset email sent. Check your inbox for the reset link.');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unable to send password reset email.';
       setError(message);
     } finally {
       setSubmitting(false);
@@ -180,23 +178,47 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             }}
           />
 
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-            style={{
-              background: 'rgba(255,255,255,0.08)',
-              border: '2px solid rgba(255,255,255,0.15)',
-              borderRadius: 12,
-              padding: '12px 14px',
-              color: 'white',
-              outline: 'none',
-              fontWeight: 700,
-            }}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '2px solid rgba(255,255,255,0.15)',
+                borderRadius: 12,
+                padding: '12px 44px 12px 14px',
+                color: 'white',
+                outline: 'none',
+                fontWeight: 700,
+                width: '100%',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: 12,
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.72)',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
 
           {error && (
             <div
@@ -212,6 +234,42 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             >
               {error}
             </div>
+          )}
+
+          {message && (
+            <div
+              style={{
+                background: 'rgba(67,160,71,0.16)',
+                border: '1px solid rgba(67,160,71,0.4)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                color: '#B9F6CA',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {message}
+            </div>
+          )}
+
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={submitting}
+              style={{
+                alignSelf: 'flex-end',
+                background: 'transparent',
+                border: 'none',
+                color: '#90CAF9',
+                cursor: submitting ? 'default' : 'pointer',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: 0,
+              }}
+            >
+              FORGOT PASSWORD?
+            </button>
           )}
 
           <button

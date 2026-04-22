@@ -105,9 +105,9 @@ export function SwapExchangeCue({
   const midY = (from.y + to.y) / 2;
   const distance = Math.hypot(to.x - from.x, to.y - from.y);
   const angle = Math.atan2(to.y - from.y, to.x - from.x) * (180 / Math.PI);
-  const arcHeight = Math.min(54, Math.max(26, distance * 0.15));
-  const ghostWidth = 38;
-  const ghostHeight = 54;
+  const arcHeight = Math.min(68, Math.max(32, distance * 0.18));
+  const ghostWidth = 46;
+  const ghostHeight = 64;
 
   const ghostCardStyle: CSSProperties = {
     position: 'absolute',
@@ -140,7 +140,7 @@ export function SwapExchangeCue({
       <motion.div
         initial={{ opacity: 0, scaleX: 0.86 }}
         animate={{ opacity: [0, 0.42, 0.18], scaleX: [0.86, 1, 1] }}
-        transition={{ duration: 0.92, ease: 'easeOut' }}
+        transition={{ duration: 1.25, ease: 'easeOut' }}
         style={{
           position: 'absolute',
           left: midX - distance / 2,
@@ -160,17 +160,17 @@ export function SwapExchangeCue({
           key={`${point.x}-${point.y}-${index}`}
           initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: [0, 0.95, 0.1], scale: [0.7, 1.18, 1.34] }}
-          transition={{ duration: 0.88, ease: 'easeOut', delay: index * 0.06 }}
+          transition={{ duration: 1.15, ease: 'easeOut', delay: index * 0.06 }}
           style={{
             position: 'absolute',
-            left: point.x - 12,
-            top: point.y - 12,
-            width: 24,
-            height: 24,
+            left: point.x - 15,
+            top: point.y - 15,
+            width: 30,
+            height: 30,
             borderRadius: '50%',
             border: '2px solid rgba(255,205,210,0.74)',
             background: 'radial-gradient(circle, rgba(255,138,128,0.4) 0%, rgba(239,83,80,0.16) 46%, transparent 72%)',
-            boxShadow: '0 0 18px rgba(239,83,80,0.28)',
+            boxShadow: '0 0 24px rgba(239,83,80,0.36)',
           }}
         />
       ))}
@@ -178,13 +178,13 @@ export function SwapExchangeCue({
       <motion.div
         initial={{ opacity: 0, scale: 0.84, rotate: -24 }}
         animate={{ opacity: [0, 1, 0.18], scale: [0.84, 1.06, 1], rotate: [ -24, 0, 10 ] }}
-        transition={{ duration: 0.96, ease: 'easeOut' }}
+        transition={{ duration: 1.3, ease: 'easeOut' }}
         style={{
           position: 'absolute',
-          left: midX - 22,
-          top: midY - 22,
-          width: 44,
-          height: 44,
+          left: midX - 26,
+          top: midY - 26,
+          width: 52,
+          height: 52,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
@@ -194,7 +194,7 @@ export function SwapExchangeCue({
           boxShadow: '0 14px 28px rgba(0,0,0,0.18), 0 0 24px rgba(239,83,80,0.22)',
         }}
       >
-        <RotateCcw size={18} color="#B71C1C" strokeWidth={2.4} />
+        <RotateCcw size={22} color="#B71C1C" strokeWidth={2.4} />
       </motion.div>
 
       <motion.div
@@ -212,7 +212,7 @@ export function SwapExchangeCue({
           rotate: [-10, 12, 4],
           scale: [0.92, 1.06, 1],
         }}
-        transition={{ duration: 0.96, ease: 'easeInOut', times: [0, 0.18, 1] }}
+        transition={{ duration: 1.3, ease: 'easeInOut', times: [0, 0.18, 1] }}
         style={ghostCardStyle}
       >
         <div
@@ -241,7 +241,7 @@ export function SwapExchangeCue({
           rotate: [10, -12, -4],
           scale: [0.92, 1.06, 1],
         }}
-        transition={{ duration: 0.96, ease: 'easeInOut', times: [0, 0.18, 1] }}
+        transition={{ duration: 1.3, ease: 'easeInOut', times: [0, 0.18, 1] }}
         style={{
           ...ghostCardStyle,
           background: 'linear-gradient(145deg, rgba(255,250,250,0.96) 0%, rgba(255,224,178,0.92) 100%)',

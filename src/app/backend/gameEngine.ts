@@ -32,7 +32,8 @@ export interface ReactionEntry {
   playerId: string;
   targetPlayerId: string;  // whose card was clicked
   cardIndex: number;   // flat index in that player's hand
-  timestamp: number;   // ms since epoch — use Firestore serverTimestamp in sync layer
+  timestamp: number;   // client-side fallback for solo mode and legacy reactions
+  serverOrder?: number | null; // shared transaction-assigned order for multiplayer fairness
 }
 
 export interface GameState {
@@ -48,12 +49,22 @@ export interface GameState {
   lastDiscardedById: string | null;
   reactionWindowOpen: boolean;
   reactions: ReactionEntry[];
+  nextReactionOrder?: number;
   finalRound: boolean;
   knockedById: string | null;
   gameOver: boolean;
   scores: Record<string, number>;
   // Power 9: tracks which two cards are being peeked before optional swap
   power9Selection: { playerId: string; cardIndex: number }[] | null;
+  // UI-only: the opponent whose panel should glow on non-acting players' screens
+  // while power 8/9/10 is in progress. Set by the acting player, read by everyone.
+  powerFocusTargetId?: string | null;
+  // UI-only: the specific card being peeked during power 7 (own card) or power 8
+  // (opponent card). Set when the acting player taps the card, cleared on resolve.
+  peekRevealCard?: { playerId: string; cardIndex: number } | null;
+  // UI-only: the most-recently selected card during power 9/10 selection phase.
+  // Updated on every pick so all clients can anchor the hand cue to the correct card.
+  powerCueCard?: { playerId: string; cardIndex: number } | null;
 
   pendingGiveaway: {
     giverId: string;
@@ -69,9 +80,10 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 export function getCardValue(rank: string, suit: Suit): number {
   if (suit === 'joker') return -1;                          // Joker = -1
   if (rank === 'K' && (suit === 'spades' || suit === 'clubs')) return -2; // Black King = -2
-  if (rank === 'K') return 13;                              // Red King = 13
+  if (rank === 'K') return 13;                              // Other Kings = 13
+  if (rank === 'Q') return 12;
+  if (rank === 'J') return 11;
   if (rank === 'A') return 1;
-  if (rank === 'J' || rank === 'Q') return 10;
   return parseInt(rank, 10);
 }
 
@@ -128,11 +140,15 @@ export function createInitialGameState(playerIds: string[]): GameState {
     lastDiscardedById: null,
     reactionWindowOpen: false,
     reactions: [],
+    nextReactionOrder: 1,
     finalRound: false,
     knockedById: null,
     gameOver: false,
     scores: {},
     power9Selection: null,
+    powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -140,21 +156,9 @@ export function createInitialGameState(playerIds: string[]): GameState {
 // ─── Score Calculation ────────────────────────────────────────────────────────
 
 export function calcHandScore(cards: (Card | null)[]): number {
-  // The starting 2x2 hand still uses column-cancel rules. Any extra penalty cards
-  // beyond the original four count individually.
-  let total = 0;
-  for (let col = 0; col < 2; col++) {
-    const top = cards[col];       // row 0
-    const bot = cards[col + 2];   // row 1
-    // Column match cancels out both cards
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
-    if (top?.faceUp) total += top.value;
-    if (bot?.faceUp) total += bot.value;
-  }
-  for (let i = 4; i < cards.length; i++) {
-    if (cards[i]?.faceUp) total += cards[i]!.value;
-  }
-  return total;
+  return cards.reduce((total, card) => (
+    card?.faceUp ? total + card.value : total
+  ), 0);
 }
 
 export function calcFinalScores(state: GameState): Record<string, number> {
@@ -199,15 +203,6 @@ function addCardToHand(cards: (Card | null)[], card: Card): (Card | null)[] {
     nextCards.push(card);
   }
   return nextCards;
-}
-
-function cloneCardForPenalty(card: Card, ownerId: string, timestamp: number): Card {
-  return {
-    ...card,
-    id: `${card.id}-penalty-${ownerId}-${timestamp}`,
-    // Once the exposed discard is taken into a hand, it should follow hand privacy again.
-    faceUp: false,
-  };
 }
 
 function removeCardFromHand(
@@ -270,6 +265,9 @@ function drawOnePenaltyCard(
       gameOver: false,
       scores: {},
       power9Selection: null,
+      powerFocusTargetId: null,
+      peekRevealCard: null,
+      powerCueCard: null,
       pendingGiveaway: null,
     } as GameState);
 
@@ -309,6 +307,9 @@ export function advanceTurn(state: GameState): GameState {
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
     pendingGiveaway: null,
   };
 }
@@ -332,6 +333,7 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   const idx = state.playerOrder.indexOf(playerId);
   const newPlayerOrder = state.playerOrder.filter(id => id !== playerId);
   const newHands = state.hands.filter(h => h.playerId !== playerId);
+  const isActivePlayer = (id: string) => newPlayerOrder.includes(id);
 
   // Only 1 player left — end game immediately
   if (newPlayerOrder.length <= 1) {
@@ -349,21 +351,86 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   // If it was the disconnected player's turn, reset to draw phase for next player
   const wasTheirTurn = idx === state.currentPlayerIndex;
 
+  const nextKnockedById = state.knockedById && isActivePlayer(state.knockedById)
+    ? state.knockedById
+    : null;
+  const nextFinalRound = nextKnockedById ? state.finalRound : false;
+
+  const nextReactions = state.reactions.filter(reaction => (
+    isActivePlayer(reaction.playerId) && isActivePlayer(reaction.targetPlayerId)
+  ));
+
+  const nextPower9Selection = (state.power9Selection ?? []).filter(selection => (
+    isActivePlayer(selection.playerId)
+  ));
+
+  const nextPendingGiveaway = state.pendingGiveaway &&
+    isActivePlayer(state.pendingGiveaway.giverId) &&
+    isActivePlayer(state.pendingGiveaway.receiverId)
+      ? state.pendingGiveaway
+      : null;
+
+  const shouldAbortReactionWindow = state.reactionWindowOpen || state.phase === 'react';
+  const shouldAbortGiveaway = state.phase === 'giveaway' || nextPendingGiveaway === null && state.pendingGiveaway !== null;
+  const shouldResumeToSafeDraw = shouldAbortReactionWindow || shouldAbortGiveaway;
+  const safeDrawIndex = wasTheirTurn ? newIndex : (newIndex + 1) % newPlayerOrder.length;
+
+  const nextScores = Object.fromEntries(
+    Object.entries(state.scores).filter(([id]) => isActivePlayer(id)),
+  );
+
+  if (shouldResumeToSafeDraw) {
+    return {
+      ...state,
+      playerOrder: newPlayerOrder,
+      hands: newHands,
+      scores: nextScores,
+      currentPlayerIndex: safeDrawIndex,
+      phase: 'draw',
+      drawnCard: null,
+      pendingPower: null,
+      lastDiscardedCard: null,
+      lastDiscardedById: null,
+      reactionWindowOpen: false,
+      reactions: [],
+      finalRound: nextFinalRound,
+      knockedById: nextKnockedById,
+      power9Selection: null,
+      powerFocusTargetId: null,
+      peekRevealCard: null,
+      powerCueCard: null,
+      pendingGiveaway: null,
+    };
+  }
+
   return {
     ...state,
     playerOrder: newPlayerOrder,
     hands: newHands,
+    scores: nextScores,
     currentPlayerIndex: newIndex,
+    finalRound: nextFinalRound,
+    knockedById: nextKnockedById,
     phase: wasTheirTurn ? 'draw' : state.phase,
     drawnCard: wasTheirTurn ? null : state.drawnCard,
     pendingPower: wasTheirTurn ? null : state.pendingPower,
+    lastDiscardedById: state.lastDiscardedById === playerId ? null : state.lastDiscardedById,
+    reactionWindowOpen: false,
+    reactions: nextReactions,
+    power9Selection: wasTheirTurn ? null : (nextPower9Selection.length > 0 ? nextPower9Selection : null),
+    powerFocusTargetId: wasTheirTurn || state.powerFocusTargetId === playerId ? null : state.powerFocusTargetId,
+    peekRevealCard: wasTheirTurn || state.peekRevealCard?.playerId === playerId ? null : state.peekRevealCard,
+    powerCueCard: wasTheirTurn || state.powerCueCard?.playerId === playerId ? null : state.powerCueCard,
+    pendingGiveaway: nextPendingGiveaway,
   };
 }
 
 // ─── Phase: Peek ──────────────────────────────────────────────────────────────
 
-// Called after the 5-second peek timer ends on all clients
+// Called after the 5-second peek timer ends on all clients.
+// Ignore stale timer completions once the game has already advanced.
 export function endPeekPhase(state: GameState): GameState {
+  if (state.phase !== 'peek') return state;
   return { ...state, phase: 'draw' };
 }
 
@@ -413,7 +480,7 @@ export function takeFromDiscard(state: GameState, playerId: string): GameState {
 export function skipPower(state: GameState, playerId: string): GameState {
   if (state.phase !== 'power') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== playerId) return state;
-  return { ...state, phase: 'swap', pendingPower: null };
+  return { ...state, phase: 'swap', pendingPower: null, powerFocusTargetId: null, peekRevealCard: null, powerCueCard: null };
 }
 
 function discardActivePowerCard(state: GameState, playerId: string, hands = state.hands): GameState {
@@ -432,6 +499,9 @@ function discardActivePowerCard(state: GameState, playerId: string, hands = stat
     reactionWindowOpen: true,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
   };
 }
 
@@ -624,6 +694,15 @@ export function discardDrawnCard(state: GameState, playerId: string): GameState 
 
 // ─── Phase: React ─────────────────────────────────────────────────────────────
 
+function isReactionBlockedByKnock(
+  state: GameState,
+  reactingPlayerId: string,
+  targetPlayerId: string,
+): boolean {
+  if (!state.knockedById) return false;
+  return reactingPlayerId === state.knockedById || targetPlayerId === state.knockedById;
+}
+
 // A player submits a reaction (they claim to have a matching card)
 export function submitReaction(
   state: GameState,
@@ -631,17 +710,36 @@ export function submitReaction(
   targetPlayerId: string,
   cardIndex: number,
   timestamp: number,
+  serverOrder?: number | null,
 ): GameState {
   if (!state.reactionWindowOpen) return state;
+  if (!state.playerOrder.includes(reactingPlayerId)) return state;
+  if (!state.playerOrder.includes(targetPlayerId)) return state;
   if (state.reactions.some(r => r.playerId === reactingPlayerId)) return state;
+  if (isReactionBlockedByKnock(state, reactingPlayerId, targetPlayerId)) return state;
 
   return {
     ...state,
     reactions: [
       ...state.reactions,
-      { playerId: reactingPlayerId, targetPlayerId, cardIndex, timestamp },
+      { playerId: reactingPlayerId, targetPlayerId, cardIndex, timestamp, serverOrder: serverOrder ?? null },
     ],
   };
+}
+
+export function compareReactionEntries(a: ReactionEntry, b: ReactionEntry): number {
+  const aHasServerOrder = typeof a.serverOrder === 'number';
+  const bHasServerOrder = typeof b.serverOrder === 'number';
+
+  if (aHasServerOrder && bHasServerOrder && a.serverOrder !== b.serverOrder) {
+    return a.serverOrder - b.serverOrder;
+  }
+
+  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+  if (aHasServerOrder !== bHasServerOrder) return aHasServerOrder ? -1 : 1;
+  if (a.playerId !== b.playerId) return a.playerId.localeCompare(b.playerId);
+  if (a.targetPlayerId !== b.targetPlayerId) return a.targetPlayerId.localeCompare(b.targetPlayerId);
+  return a.cardIndex - b.cardIndex;
 }
 
 // Called when the 3-second reaction window closes
@@ -653,7 +751,11 @@ export function resolveReactionWindow(state: GameState): GameState {
   }
 
   const discardedValue = state.lastDiscardedCard.value;
-  const sorted = [...state.reactions].sort((a, b) => a.timestamp - b.timestamp);
+  const activePlayerIds = new Set(state.playerOrder);
+  const sorted = [...state.reactions]
+    .filter(reaction => activePlayerIds.has(reaction.playerId) && activePlayerIds.has(reaction.targetPlayerId))
+    .filter(reaction => !isReactionBlockedByKnock(state, reaction.playerId, reaction.targetPlayerId))
+    .sort(compareReactionEntries);
 
   const winningReaction =
     sorted.find(reaction => {
@@ -682,7 +784,8 @@ export function resolveReactionWindow(state: GameState): GameState {
       reaction.playerId === winningReaction.playerId &&
       reaction.targetPlayerId === winningReaction.targetPlayerId &&
       reaction.cardIndex === winningReaction.cardIndex &&
-      reaction.timestamp === winningReaction.timestamp;
+      reaction.timestamp === winningReaction.timestamp &&
+      (reaction.serverOrder ?? null) === (winningReaction.serverOrder ?? null);
 
     const targetHand = hands.find(h => h.playerId === reaction.targetPlayerId);
     const selectedCard = targetHand?.cards[reaction.cardIndex] ?? null;
@@ -763,6 +866,14 @@ export function giveAwayCard(
 ): GameState {
   if (state.phase !== 'giveaway' || !state.pendingGiveaway) return state;
   if (state.pendingGiveaway.giverId !== giverId) return state;
+  if (!state.hands.some(hand => hand.playerId === state.pendingGiveaway.receiverId)) {
+    return advanceTurn({
+      ...state,
+      pendingGiveaway: null,
+      reactionWindowOpen: false,
+      reactions: [],
+    });
+  }
 
   const giverHand = state.hands.find(h => h.playerId === giverId);
   const selectedCard = giverHand?.cards[giverCardIndex] ?? null;
@@ -805,6 +916,9 @@ export function knock(state: GameState, playerId: string): GameState {
     reactionWindowOpen: false,
     reactions: [],
     power9Selection: null,
+    powerFocusTargetId: null,
+    peekRevealCard: null,
+    powerCueCard: null,
   };
 
   // Knocking uses up the current player's turn immediately.
