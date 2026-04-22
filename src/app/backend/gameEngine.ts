@@ -80,9 +80,10 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 export function getCardValue(rank: string, suit: Suit): number {
   if (suit === 'joker') return -1;                          // Joker = -1
   if (rank === 'K' && (suit === 'spades' || suit === 'clubs')) return -2; // Black King = -2
-  if (rank === 'K') return 13;                              // Red King = 13
+  if (rank === 'K') return 13;                              // Other Kings = 13
+  if (rank === 'Q') return 12;
+  if (rank === 'J') return 11;
   if (rank === 'A') return 1;
-  if (rank === 'J' || rank === 'Q') return 10;
   return parseInt(rank, 10);
 }
 
@@ -155,21 +156,9 @@ export function createInitialGameState(playerIds: string[]): GameState {
 // ─── Score Calculation ────────────────────────────────────────────────────────
 
 export function calcHandScore(cards: (Card | null)[]): number {
-  // The starting 2x2 hand still uses column-cancel rules. Any extra penalty cards
-  // beyond the original four count individually.
-  let total = 0;
-  for (let col = 0; col < 2; col++) {
-    const top = cards[col];       // row 0
-    const bot = cards[col + 2];   // row 1
-    // Column match cancels out both cards
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
-    if (top?.faceUp) total += top.value;
-    if (bot?.faceUp) total += bot.value;
-  }
-  for (let i = 4; i < cards.length; i++) {
-    if (cards[i]?.faceUp) total += cards[i]!.value;
-  }
-  return total;
+  return cards.reduce((total, card) => (
+    card?.faceUp ? total + card.value : total
+  ), 0);
 }
 
 export function calcFinalScores(state: GameState): Record<string, number> {

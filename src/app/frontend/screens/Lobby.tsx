@@ -459,7 +459,7 @@ export default function Lobby() {
             <div>
               <div className="lobby-help-card__eyebrow">HOW TO PLAY</div>
               <div className="lobby-help-card__summary">
-                Lowest score wins. 7 = peek self. 8 = spy opponent. King = -2. Joker = -1.
+                Lowest score wins. 7 = peek self. 8 = spy opponent. Black King = -2. Joker = -1.
               </div>
             </div>
             <button
@@ -475,7 +475,7 @@ export default function Lobby() {
             <span className="lobby-help-chip">Lowest score wins</span>
             <span className="lobby-help-chip">7 = Peek self</span>
             <span className="lobby-help-chip">8 = Spy opponent</span>
-            <span className="lobby-help-chip">King = -2</span>
+            <span className="lobby-help-chip">Black King = -2</span>
             <span className="lobby-help-chip">Joker = -1</span>
           </div>
 
@@ -486,8 +486,8 @@ export default function Lobby() {
                 <span className="lobby-help-detail__value">Draw from the pile or take discard, then swap or discard.</span>
               </div>
               <div className="lobby-help-detail">
-                <span className="lobby-help-detail__label">Column match</span>
-                <span className="lobby-help-detail__value">Matching columns score zero points.</span>
+                <span className="lobby-help-detail__label">Scoring</span>
+                <span className="lobby-help-detail__value">Every remaining card counts individually. J = 11, Q = 12, K = 13, except K♠/K♣ = -2 and Joker = -1.</span>
               </div>
               <div className="lobby-help-detail">
                 <span className="lobby-help-detail__label">Knock</span>

@@ -41,6 +41,7 @@ import {
   resolveReactionWindow as engineResolveReactionWindow,
   giveAwayCard as engineGiveAwayCard,
   knock as engineKnock,
+  calcHandScore,
   getCardValue,
   type GameState,
   type GamePhase as EnginePhase,
@@ -230,20 +231,7 @@ function shuffleArr<T>(arr: T[]): T[] {
 }
 
 export function calcScore(cards: (Card | null)[][]): number {
-  let total = 0;
-  for (let col = 0; col < 2; col++) {
-    const top = cards[0]?.[col];
-    const bot = cards[1]?.[col];
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
-    if (top?.faceUp) total += top.value;
-    if (bot?.faceUp) total += bot.value;
-  }
-  for (let row = 2; row < cards.length; row++) {
-    for (let col = 0; col < 2; col++) {
-      if (cards[row]?.[col]?.faceUp) total += cards[row][col]!.value;
-    }
-  }
-  return total;
+  return calcHandScore(cards.flatMap(row => row));
 }
 
 function flatCardsToRows(flat: (Card | null)[]): (Card | null)[][] {

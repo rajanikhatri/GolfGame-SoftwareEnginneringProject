@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, ChevronDown, Zap, Eye, MessageSquare, Send } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
-import { compareReactionEntries } from '../../backend/gameEngine';
+import { calcHandScore, compareReactionEntries } from '../../backend/gameEngine';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
 import { getStoredTableThemeId, getTableTheme } from '../lib/tableTheme';
@@ -930,19 +930,6 @@ function PlayerCardGrid({
                     SWAPPED
                   </motion.div>
                 )}
-                {/* Column match indicator — only for your own cards */}
-                {ri === 0 && isYou && player.cards[1]?.[ci] &&
-                  card?.faceUp && player.cards[1][ci]?.faceUp &&
-                  card?.value === player.cards[1][ci]?.value && (
-                    <div style={{
-                      position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)',
-                      background: '#4CAF50', borderRadius: 50, padding: '2px 6px',
-                      fontSize: 9, fontWeight: 900, color: 'white', fontFamily: 'Nunito',
-                      whiteSpace: 'nowrap', zIndex: 5,
-                      boxShadow: '0 2px 6px rgba(76,175,80,0.5)',
-                    }}>MATCH!</div>
-                  )
-                }
                 {/* Peek indicator */}
                 {isPeeked && (
                   <div style={{
@@ -2166,20 +2153,7 @@ export default function Game() {
   };
 
   const calcVisibleScore = (p: Player) => {
-    let total = 0;
-    for (let col = 0; col < 2; col++) {
-      const top = p.cards[0]?.[col];
-      const bot = p.cards[1]?.[col];
-      if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
-      if (top?.faceUp) total += top.value;
-      if (bot?.faceUp) total += bot.value;
-    }
-    for (let row = 2; row < p.cards.length; row++) {
-      for (let col = 0; col < 2; col++) {
-        if (p.cards[row]?.[col]?.faceUp) total += p.cards[row][col]!.value;
-      }
-    }
-    return total;
+    return calcHandScore(p.cards.flatMap(row => row));
   };
 
   const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
@@ -2444,7 +2418,10 @@ export default function Game() {
                   </div>
                   <div className="game-rules-modal__section">
                     <div className="game-rules-modal__section-title">Special Scores</div>
+                    <div className="game-rules-modal__rule"><strong>J:</strong> worth `11`.</div>
+                    <div className="game-rules-modal__rule"><strong>Q:</strong> worth `12`.</div>
                     <div className="game-rules-modal__rule"><strong>K♠ / K♣:</strong> worth `-2`.</div>
+                    <div className="game-rules-modal__rule"><strong>K♥ / K♦:</strong> worth `13`.</div>
                     <div className="game-rules-modal__rule"><strong>★:</strong> worth `-1`.</div>
                   </div>
                   <div className="game-rules-modal__section">
