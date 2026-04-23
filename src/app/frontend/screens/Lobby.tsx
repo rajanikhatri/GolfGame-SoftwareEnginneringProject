@@ -318,7 +318,8 @@ export default function Lobby() {
         </button>
 
         <div className="lobby-header__center">
-          <div className="lobby-header__eyebrow">PLAYERS</div>
+          <div className="lobby-header__eyebrow">LOBBY</div>
+          <div className="lobby-header__kicker">Players Ready</div>
           <div className="lobby-header__title">{readyPlayerCount}/4 READY</div>
           {gameMode !== 'solo' && (
             <div className="lobby-header__room-row">
@@ -459,7 +460,7 @@ export default function Lobby() {
             <div>
               <div className="lobby-help-card__eyebrow">HOW TO PLAY</div>
               <div className="lobby-help-card__summary">
-                Lowest score wins. 7 = peek self. 8 = spy opponent. Black King = -2. Joker = -1.
+                Keep your total low, use power cards to control hidden information, and knock when your board is ready.
               </div>
             </div>
             <button
@@ -472,11 +473,11 @@ export default function Lobby() {
           </div>
 
           <div className="lobby-help-card__chips">
-            <span className="lobby-help-chip">Lowest score wins</span>
-            <span className="lobby-help-chip">7 = Peek self</span>
-            <span className="lobby-help-chip">8 = Spy opponent</span>
-            <span className="lobby-help-chip">Black King = -2</span>
-            <span className="lobby-help-chip">Joker = -1</span>
+            <span className="lobby-help-chip">Goal: Lowest total</span>
+            <span className="lobby-help-chip">7: Peek your card</span>
+            <span className="lobby-help-chip">8: Spy opponent</span>
+            <span className="lobby-help-chip">Black King: -2</span>
+            <span className="lobby-help-chip">Joker: -1</span>
           </div>
 
           {showRulesDetails && (
