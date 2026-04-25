@@ -1313,6 +1313,13 @@ export default function Game() {
   const swapMode = phase === 'swap' && isMyTurn;
   const canGiveAway = phase === 'giveaway' && giveawayGiverId === p1?.id;
   const giveawayGiverName = players.find(player => player.id === giveawayGiverId)?.name ?? 'Someone';
+  const reactionMode = matchWindowActive;
+  const canReactThisWindow = reactionMode && knockedBy !== myPlayerId;
+  const canReactToPlayer = (playerId?: string) => Boolean(
+    canReactThisWindow &&
+    playerId &&
+    playerId !== knockedBy
+  );
 
   useEffect(() => {
     if (!peekActive) return;
@@ -1732,11 +1739,12 @@ export default function Game() {
   }, [phase, isMyTurn, canGiveAway, swapCard, giveAwayCardAction]);
 
   const handleReactionCardClick = useCallback((targetPlayerId: string, row: number, col: number) => {
-    if (matchWindowActive) {
-      setSubmittedReactionCard({ playerId: targetPlayerId, row, col });
-      reactToDiscard(targetPlayerId, row, col);
-    }
-  }, [matchWindowActive, reactToDiscard]);
+    if (!matchWindowActive) return;
+    if (myPlayerId === knockedBy || targetPlayerId === knockedBy) return;
+
+    setSubmittedReactionCard({ playerId: targetPlayerId, row, col });
+    reactToDiscard(targetPlayerId, row, col);
+  }, [matchWindowActive, myPlayerId, knockedBy, reactToDiscard]);
 
   const isSamePowerSelection = useCallback((a: PowerSelection, b: PowerSelection) => {
     return a.playerId === b.playerId && a.cardFlatIndex === b.cardFlatIndex;
@@ -2029,7 +2037,6 @@ export default function Game() {
   };
 
   const showPowerBanner = Boolean(powerInteractionActive && powerBannerCopy);
-  const reactionMode = matchWindowActive;
 
   // ─── Focus mode: opponent-side spotlight/dim for power-card actions ─────────
   // Both signals come from shared Firestore state, so they fire on ALL clients
@@ -2088,7 +2095,7 @@ export default function Game() {
     : phase === 'giveaway'
     ? (canGiveAway ? '🎁 GIVE A CARD AWAY' : `🎁 ${giveawayGiverName} IS GIVING A CARD`)
     : phase === 'match_window'
-    ? '⚡ MATCH WINDOW'
+    ? (canReactThisWindow ? '⚡ MATCH WINDOW' : '🚫 KNOCKED - MATCH LOCKED')
     : phase === 'swap'
     ? (isMyTurn ? '🔄 SWAP OR DISCARD' : `${players[currentPlayerIndex]?.name}'S TURN`)
     : phase === 'draw'
@@ -2405,7 +2412,7 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(2)}
               onPowerClick={handlePowerClickP3}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p3?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p3.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
@@ -2435,7 +2442,7 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(1)}
               onPowerClick={handlePowerClickP2}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p2?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p2.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
@@ -2484,7 +2491,7 @@ export default function Game() {
               powerTone={powerTone}
               powerGuideText={buildPowerGuideText(3)}
               onPowerClick={handlePowerClickP4}
-              reactionSelectable={reactionMode}
+              reactionSelectable={canReactToPlayer(p4?.id)}
               onReactionClick={handleReactionCardClick}
               reactionSelected={submittedReactionCard?.playerId === p4.id ? submittedReactionCard : null}
               registerCardNode={registerCardNode}
@@ -2592,7 +2599,11 @@ export default function Game() {
                     fontFamily: 'Nunito',
                   }}
                 >
-                  {submittedReactionCard ? '✅ REACTION SENT' : '⚡ TAP YOUR MATCHING CARD'}
+                  {!canReactThisWindow
+                    ? '🚫 YOU KNOCKED - NO MATCHES'
+                    : submittedReactionCard
+                    ? '✅ REACTION SENT'
+                    : '⚡ TAP YOUR MATCHING CARD'}
                 </motion.div>
               )}
             </div>
@@ -2612,7 +2623,7 @@ export default function Game() {
                 powerModeActive={powerInteractionActive}
                 powerTone={powerTone}
                 onPowerClick={handlePowerClickP1}
-                reactionSelectable={reactionMode}
+                reactionSelectable={canReactToPlayer(p1?.id)}
                 onReactionClick={handleReactionCardClick}
                 reactionSelected={submittedReactionCard}
                 peekPhase={peekActive}
@@ -2719,7 +2730,9 @@ export default function Game() {
               {phase === 'giveaway' && canGiveAway && '🎁 Choose one of your cards to give away'}
               {phase === 'giveaway' && !canGiveAway && `🎁 ${giveawayGiverName} is giving a card away...`}
               {reactionMode && (
-                submittedReactionCard
+                !canReactThisWindow
+                  ? '🚫 You knocked, so you are out of match reactions'
+                  : submittedReactionCard
                   ? '✅ Reaction submitted'
                   : '⚡ Reaction window: tap any matching card now'
               )}

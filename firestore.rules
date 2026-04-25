@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isProfileOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, create, update: if isProfileOwner(uid);
+    }
+
+    match /leaderboard/{uid} {
+      allow read: if isSignedIn();
+
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['uid', 'displayName', 'wins', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'wins', 'avatar', 'color', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.wins is int
+        && request.resource.data.wins >= 0
+        && request.resource.data.updatedAt is int
+        && (!('avatar' in request.resource.data) || request.resource.data.avatar is string)
+        && (!('color' in request.resource.data) || request.resource.data.color is string);
+    }
+
+    match /rooms/{roomId} {
+      allow read, write: if isSignedIn();
+
+      match /state/{stateId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+  }
+}
