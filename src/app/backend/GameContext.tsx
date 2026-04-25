@@ -442,6 +442,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const playerProfilesRef  = useRef<PlayerProfile[]>([]);
   const myPlayerIdRef      = useRef('');
   const presenceCleanupRef = useRef<PresenceCleanup | null>(null);
+  const presenceRoomCodeRef = useRef("");
+  const presencePlayerIdRef = useRef("");
   const lastGameStateRef   = useRef<GameState | null>(null);
   const soloPendingGiveawayRef = useRef<{ giverId: string; receiverId: string } | null>(null);
   const leavingPlayerIdsRef = useRef<Set<string>>(new Set());
@@ -681,11 +683,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gameActiveRef.current = true;
 
     // Register this player as online (RTDB onDisconnect handles cleanup automatically)
-    if (presenceCleanupRef.current) {
-      await presenceCleanupRef.current().catch(console.error);
-      presenceCleanupRef.current = null;
+    const activeRoomCode = roomCodeRef.current;
+    const alreadyRegisteredPresence =
+      presenceCleanupRef.current &&
+      presenceRoomCodeRef.current === activeRoomCode &&
+      presencePlayerIdRef.current === myId;
+
+    if (!alreadyRegisteredPresence) {
+      if (presenceCleanupRef.current) {
+        await presenceCleanupRef.current().catch(console.error);
+        presenceCleanupRef.current = null;
+      }
+      presenceRoomCodeRef.current = "";
+      presencePlayerIdRef.current = "";
+      presenceCleanupRef.current = await registerPresence(activeRoomCode, myId);
+      presenceRoomCodeRef.current = activeRoomCode;
+      presencePlayerIdRef.current = myId;
     }
-    presenceCleanupRef.current = await registerPresence(roomCodeRef.current, myId);
 
     // Only the host passes roomPlayerIds — creates the authoritative deck in Firestore
     if (roomPlayerIds && roomPlayerIds.length > 0) {
@@ -1525,6 +1539,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         await presenceCleanupRef.current().catch(console.error);
         presenceCleanupRef.current = null;
       }
+      presenceRoomCodeRef.current = "";
+      presencePlayerIdRef.current = "";
       resetGame();
       setRoomCode('');
       setChatMessages(LOBBY_MESSAGES);
@@ -1535,6 +1551,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const cleanupPresence = presenceCleanupRef.current;
     presenceCleanupRef.current = null;
+    presenceRoomCodeRef.current = "";
+    presencePlayerIdRef.current = "";
 
     await Promise.allSettled([
       cleanupPresence ? cleanupPresence() : Promise.resolve(),

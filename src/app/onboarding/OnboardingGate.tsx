@@ -12,12 +12,23 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = usePlayerAuth();
   const authenticatedUser = user && !user.isAnonymous ? user : null;
   const [step, setStep] = useState<OnboardingStep>('complete');
+  const [hasInitializedStep, setHasInitializedStep] = useState(false);
 
   useEffect(() => {
-    if (loading || authenticatedUser) return;
+    if (loading) return;
+
+    if (authenticatedUser) {
+      setStep('complete');
+      setHasInitializedStep(true);
+      return;
+    }
+
+    if (hasInitializedStep) return;
+
     const completed = window.localStorage.getItem(TUTORIAL_COMPLETE_KEY) === 'true';
     setStep(completed ? 'complete' : 'landing');
-  }, [authenticatedUser, loading]);
+    setHasInitializedStep(true);
+  }, [authenticatedUser, hasInitializedStep, loading]);
 
   function goToAuth(rememberChoice = false) {
     if (rememberChoice) {
