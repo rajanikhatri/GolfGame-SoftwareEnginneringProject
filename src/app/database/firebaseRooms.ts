@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   setDoc,
@@ -39,6 +40,7 @@ export interface FirebaseRoomDoc {
   roomName?: string;
   maxPlayers?: number;
   password?: string;
+  isPrivate?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   gameState?: any;
 }
@@ -52,7 +54,7 @@ export interface MultiplayerProfileInput {
 
 const roomsCol = collection(firebaseDb, 'rooms');
 const leaderboardCol = collection(firebaseDb, 'leaderboard');
-const ROOM_MATCH_RETIRE_LIMIT = 3;
+const ROOM_MATCH_RETIRE_LIMIT = 1;
 
 function roomRef(code: string) {
   return doc(roomsCol, normalizeRoomCode(code));
@@ -93,7 +95,7 @@ export async function getWaitingRooms(): Promise<FirebaseRoomDoc[]> {
 
 export async function createRoomWithRetries(
   profile: MultiplayerProfileInput,
-  options: { roomName?: string; maxPlayers?: number; password?: string } = {},
+  options: { roomName?: string; maxPlayers?: number; password?: string; isPrivate?: boolean } = {},
   retries = 10,
 ) {
   const user = await ensureAnonymousUser();
@@ -128,6 +130,7 @@ export async function createRoomWithRetries(
           roomName: options.roomName ?? `${profile.name}'s room`,
           maxPlayers: options.maxPlayers ?? 4,
           password: options.password ?? '',
+          isPrivate: options.isPrivate ?? false,
         } satisfies FirebaseRoomDoc);
       });
       return { code, playerId: user.uid };
@@ -189,16 +192,25 @@ export async function joinRoomByCode(code: string, profile: MultiplayerProfileIn
 
 export async function leaveRoomByCode(code: string) {
   const user = await ensureAnonymousUser();
-  const ref = roomRef(code);
+  await removePlayerFromRoom(code, user.uid);
+}
+
+export async function removePlayerFromRoom(code: string, playerId: string): Promise<void> {
+  const normalized = normalizeRoomCode(code);
+  const ref = roomRef(normalized);
+  const stateRef = roomGameStateRef(normalized);
 
   await runTransaction(firebaseDb, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) return;
     const room = snap.data() as FirebaseRoomDoc;
-    const remaining = room.players.filter((p) => p.id !== user.uid);
+    const remaining = room.players.filter((p) => p.id !== playerId);
+
+    if (remaining.length === room.players.length) return;
 
     if (remaining.length === 0) {
       tx.delete(ref);
+      tx.delete(stateRef);
       return;
     }
 
@@ -328,4 +340,70 @@ export async function setRoomGameState<T extends Record<string, unknown>>(code: 
 export async function clearRoomGameState(code: string) {
   const ref = roomGameStateRef(code);
   await deleteDoc(ref);
+}
+
+// ─── Public room browser ─────────────────────────────────────────────────────
+
+export async function isPublicRoomNameTaken(name: string): Promise<boolean> {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  const q = query(roomsCol, where('roomName', '==', trimmed));
+  const snap = await getDocs(q);
+  return snap.docs.some(d => {
+    const room = d.data() as FirebaseRoomDoc;
+    return (
+      room.isPrivate !== true &&
+      room.status !== 'ended' &&
+      (room.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT
+    );
+  });
+}
+
+export function subscribeToPublicRooms(
+  onRooms: (rooms: FirebaseRoomDoc[]) => void,
+): Unsubscribe {
+  const q = query(roomsCol, where('status', '==', 'waiting'));
+  return onSnapshot(q, snap => {
+    const rooms = snap.docs
+      .map(d => d.data() as FirebaseRoomDoc)
+      .filter(r => r.isPrivate !== true && (r.matchesPlayed ?? 0) < ROOM_MATCH_RETIRE_LIMIT)
+      .sort((a, b) => b.createdAt - a.createdAt); // newest first
+    onRooms(rooms);
+  });
+}
+
+// ─── Room Chat ────────────────────────────────────────────────────────────────
+
+export interface FirebaseRoomChatMessage {
+  id: string;
+  playerId: string;
+  playerName: string;
+  message: string;
+  timestamp: number;
+}
+
+function roomChatCol(code: string) {
+  return collection(firebaseDb, 'rooms', normalizeRoomCode(code), 'chat');
+}
+
+export async function sendRoomChatMessage(
+  code: string,
+  msg: Omit<FirebaseRoomChatMessage, 'id' | 'timestamp'>,
+): Promise<void> {
+  const msgRef = doc(roomChatCol(code));
+  await setDoc(msgRef, {
+    ...msg,
+    id: msgRef.id,
+    timestamp: Date.now(),
+  } satisfies FirebaseRoomChatMessage);
+}
+
+export function subscribeToRoomChat(
+  code: string,
+  onMessages: (messages: FirebaseRoomChatMessage[]) => void,
+): Unsubscribe {
+  const q = query(roomChatCol(code), orderBy('timestamp', 'asc'));
+  return onSnapshot(q, snap => {
+    onMessages(snap.docs.map(d => d.data() as FirebaseRoomChatMessage));
+  });
 }
