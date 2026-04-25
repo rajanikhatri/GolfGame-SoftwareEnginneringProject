@@ -305,6 +305,64 @@ function PowerBanner({
   );
 }
 
+function GiveawayBanner({
+  canGiveAway,
+  giveawayGiverName,
+}: {
+  canGiveAway: boolean;
+  giveawayGiverName: string;
+}) {
+  const title = canGiveAway ? 'GIVE 1 CARD AWAY' : `${giveawayGiverName.toUpperCase()} IS GIVING A CARD`;
+  const subtitle = canGiveAway
+    ? 'Tap one of your cards to give it to the other player.'
+    : 'Please wait while the other player chooses a card to give.';
+
+  return (
+    <motion.div
+      initial={{ scale: 0.94, opacity: 0, y: 18 }}
+      animate={{ scale: 1, opacity: 1, y: 0 }}
+      exit={{ scale: 0.94, opacity: 0, y: 12 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 91,
+        width: 'min(92vw, 540px)',
+        padding: '24px 28px',
+        borderRadius: 24,
+        textAlign: 'center',
+        background: 'linear-gradient(135deg, rgba(255,193,7,0.96), rgba(255,111,0,0.96))',
+        border: '3px solid rgba(255,255,255,0.85)',
+        boxShadow: '0 0 50px rgba(255,193,7,0.36), 0 22px 60px rgba(0,0,0,0.42)',
+      }}
+    >
+      <div style={{ fontSize: 42, marginBottom: 8 }}>🎁</div>
+      <div style={{
+        fontSize: 30,
+        fontWeight: 900,
+        color: 'white',
+        fontFamily: 'Nunito, sans-serif',
+        letterSpacing: '0.05em',
+        textShadow: '0 4px 12px rgba(0,0,0,0.28)',
+      }}>
+        {title}
+      </div>
+      <div style={{
+        fontSize: 17,
+        fontWeight: 800,
+        color: 'rgba(255,255,255,0.95)',
+        fontFamily: 'Nunito',
+        marginTop: 10,
+        lineHeight: 1.45,
+      }}>
+        {subtitle}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Final Round Banner ───────────────────────────────────────────────────────
 function FinalRoundBanner({ knockerName }: { knockerName: string }) {
   return (
@@ -2351,6 +2409,22 @@ export default function Game() {
             progressCurrent={powerBannerCopy.progressCurrent}
             progressTotal={powerBannerCopy.progressTotal}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {phase === 'giveaway' && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.38)', zIndex: 90, pointerEvents: 'none' }}
+            />
+            <GiveawayBanner
+              canGiveAway={canGiveAway}
+              giveawayGiverName={giveawayGiverName}
+            />
+          </>
         )}
       </AnimatePresence>
       <AnimatePresence>
