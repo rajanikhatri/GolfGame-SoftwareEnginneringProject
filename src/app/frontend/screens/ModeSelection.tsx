@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, Zap, Trophy, Users, Copy, Check, LogOut, User, Globe, Lock } from 'lucide-react';
+import { BookOpen, Star, Zap, Trophy, Users, Copy, Check, LogOut, User, Globe, Lock } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
 import { usePlayerAuth } from '../../auth/AuthContext';
 import {
@@ -381,6 +381,15 @@ export default function ModeSelection() {
                 )}
               </AnimatePresence>
             </div>
+            <button
+              type="button"
+              className="mode-selection-side-nav__button"
+              onClick={() => navigate('/tutorials')}
+              aria-label="Open tutorials"
+            >
+              <BookOpen size={16} />
+              <span>Tutorials</span>
+            </button>
             <button
               type="button"
               className="mode-selection-account-logout"

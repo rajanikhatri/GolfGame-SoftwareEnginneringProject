@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Send, Copy, Check, Wifi, Palette } from 'lucide-react';
 import { useGame } from '../../backend/GameContext';
-import { subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
+import { beginRoomStartCountdown, subscribeToRoom, startRoom, type FirebaseRoomDoc } from '../../database/firebaseRooms';
 import { ensureAnonymousUser } from '../../database/firebase';
 import {
   TABLE_THEMES,
@@ -61,6 +61,7 @@ export default function Lobby() {
   const seenPlayerIdsRef = useRef<Set<string>>(new Set());
   const isFirstRoomUpdate = useRef(true);
   const myUserIdRef = useRef<string | null>(null);
+  const roomStartFinalizedRef = useRef(false);
   const ROOM_CODE = roomCode || 'GOLF-0000';
 
   useEffect(() => {
@@ -79,6 +80,13 @@ export default function Lobby() {
 
     const unsub = subscribeToRoom(roomCode, (room: FirebaseRoomDoc | null) => {
       if (!room) return;
+
+      if (room.status === 'starting') {
+        const remainingSeconds = Math.max(1, Math.ceil(((room.startsAt ?? Date.now() + 3000) - Date.now()) / 1000));
+        setIsStarting(true);
+        setStartError(null);
+        setCountdown(remainingSeconds);
+      }
 
       if (room.status === 'playing') {
         const glowColors = ['rgba(30,136,229,0.7)', 'rgba(229,57,53,0.7)', 'rgba(67,160,71,0.7)', 'rgba(171,71,188,0.7)'];
@@ -169,13 +177,27 @@ export default function Lobby() {
   useEffect(() => {
     if (countdown === null) return;
     if (countdown === 0) {
+      if (gameMode === 'multiplayer' && roomCode) {
+        if (isHost && !roomStartFinalizedRef.current) {
+          roomStartFinalizedRef.current = true;
+          startRoom(roomCode).catch(error => {
+            const message = error instanceof Error ? error.message : 'Failed to start game';
+            setStartError(message);
+            setIsStarting(false);
+            setCountdown(null);
+            roomStartFinalizedRef.current = false;
+            console.error('Failed to start room:', error);
+          });
+        }
+        return;
+      }
       navigate('/game');
       return;
     }
 
     const timer = setTimeout(() => setCountdown(value => (value ?? 1) - 1), 1000);
     return () => clearTimeout(timer);
-  }, [countdown, navigate]);
+  }, [countdown, gameMode, isHost, navigate, roomCode]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(ROOM_CODE).catch(() => {});
@@ -207,7 +229,8 @@ export default function Lobby() {
         }));
 
         await initMultiplayer(user.uid, profiles, players.map(player => player.id));
-        await startRoom(roomCode);
+        roomStartFinalizedRef.current = false;
+        await beginRoomStartCountdown(roomCode, Date.now() + 3000);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to start game';
         setStartError(message);

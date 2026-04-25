@@ -16,7 +16,7 @@ import { ensureAnonymousUser, firebaseDb } from './firebase';
 import type { GameState } from '../backend/gameEngine';
 import type { LeaderboardEntry } from './firebaseLeaderboard';
 
-export type RoomStatus = 'waiting' | 'playing' | 'ended';
+export type RoomStatus = 'waiting' | 'starting' | 'playing' | 'ended';
 
 export interface FirebaseRoomPlayer {
   id: string;
@@ -37,6 +37,7 @@ export interface FirebaseRoomDoc {
   matchesPlayed?: number;
   createdAt: number;
   updatedAt: number;
+  startsAt?: number;
   roomName?: string;
   maxPlayers?: number;
   password?: string;
@@ -259,6 +260,26 @@ export async function startRoom(code: string, gameState?: unknown) {
       status: 'playing' satisfies RoomStatus,
       updatedAt: Date.now(),
       ...(gameState ? { gameState } : {}),
+    });
+  });
+}
+
+export async function beginRoomStartCountdown(code: string, startsAt: number) {
+  const user = await ensureAnonymousUser();
+  const ref = roomRef(code);
+
+  await runTransaction(firebaseDb, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('Room not found.');
+    const room = snap.data() as FirebaseRoomDoc;
+    if (room.hostId !== user.uid) throw new Error('Only the host can start the game.');
+    if ((room.matchesPlayed ?? 0) >= ROOM_MATCH_RETIRE_LIMIT) throw new Error('Room is inactive.');
+    if (room.status !== 'waiting') return;
+
+    tx.update(ref, {
+      status: 'starting' satisfies RoomStatus,
+      startsAt,
+      updatedAt: Date.now(),
     });
   });
 }
