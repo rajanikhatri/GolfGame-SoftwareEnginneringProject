@@ -533,8 +533,14 @@ export default function Lobby() {
             <div className="lobby-chat-card__messages">
               <AnimatePresence>
                 {chatMessages.map(msg => {
-                  const isYou = msg.playerId === 'p1';
-                  const playerColor = INITIAL_PLAYERS.find(player => player.id === msg.playerId)?.color || '#1E88E5';
+                  const sender = players.find(player => player.id === msg.playerId || player.name === msg.playerName);
+                  const isYou = Boolean(
+                    sender?.isYou ||
+                    (myUserIdRef.current && msg.playerId === myUserIdRef.current) ||
+                    (!myUserIdRef.current && msg.playerName === playerName)
+                  );
+                  const playerColor = sender?.color || INITIAL_PLAYERS.find(player => player.id === msg.playerId)?.color || '#1E88E5';
+                  const senderName = msg.playerName || sender?.name || 'Player';
                   return (
                     <motion.div
                       key={msg.id}
@@ -542,11 +548,9 @@ export default function Lobby() {
                       animate={{ opacity: 1, y: 0 }}
                       className={`flex flex-col ${isYou ? 'items-end' : 'items-start'}`}
                     >
-                      {!isYou && (
-                        <span className="lobby-chat-card__name" style={{ color: playerColor }}>
-                          {msg.playerName}
-                        </span>
-                      )}
+                      <span className={`lobby-chat-card__name${isYou ? ' lobby-chat-card__name--self' : ''}`} style={{ color: playerColor }}>
+                        {senderName}{isYou ? ' (you)' : ''}
+                      </span>
                       <div
                         className={isYou ? 'chat-bubble-self' : 'chat-bubble-other'}
                         style={{

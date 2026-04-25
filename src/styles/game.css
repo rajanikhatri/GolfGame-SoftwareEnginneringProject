@@ -1105,6 +1105,12 @@
   font-family: 'Nunito', sans-serif;
 }
 
+.lobby-chat-card__name--self {
+  padding-right: 4px;
+  padding-left: 0;
+  text-align: right;
+}
+
 .lobby-chat-card__composer {
   display: flex;
   gap: 8px;

@@ -696,9 +696,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
       presenceRoomCodeRef.current = "";
       presencePlayerIdRef.current = "";
-      presenceCleanupRef.current = await registerPresence(activeRoomCode, myId);
-      presenceRoomCodeRef.current = activeRoomCode;
-      presencePlayerIdRef.current = myId;
+      try {
+        presenceCleanupRef.current = await registerPresence(activeRoomCode, myId);
+        presenceRoomCodeRef.current = activeRoomCode;
+        presencePlayerIdRef.current = myId;
+      } catch (error) {
+        console.warn('Presence registration failed; continuing without RTDB presence.', error);
+        presenceCleanupRef.current = null;
+      }
     }
 
     // Only the host passes roomPlayerIds — creates the authoritative deck in Firestore
