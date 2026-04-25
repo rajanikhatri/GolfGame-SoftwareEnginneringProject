@@ -524,6 +524,7 @@ export function usePower8(
   if (state.phase !== 'power' || state.pendingPower !== '8') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
   if (targetPlayerId === actingPlayerId) return state;
+  if (isPlayerProtectedByKnock(state, targetPlayerId)) return state;
   const targetCard = state.hands.find(entry => entry.playerId === targetPlayerId)?.cards[cardIndex];
   if (!targetCard || targetCard.faceUp) return state;
   return discardActivePowerCard(state, actingPlayerId);
@@ -538,6 +539,8 @@ export function selectPower9Card(
 ): GameState {
   if (state.phase !== 'power' || state.pendingPower !== '9') return state;
   if (state.playerOrder[state.currentPlayerIndex] !== actingPlayerId) return state;
+  if (isPlayerProtectedByKnock(state, targetPlayerId)) return state;
+
   const targetHand = state.hands.find(hand => hand.playerId === targetPlayerId);
   if (!targetHand?.cards[cardIndex]) return state;
 
@@ -617,6 +620,9 @@ export function usePower10(
   if (card1.playerId === card2.playerId) {
     return state;
   }
+  if (isPlayerProtectedByKnock(state, card1.playerId) || isPlayerProtectedByKnock(state, card2.playerId)) {
+    return state;
+  }
 
   const hand1 = state.hands.find(h => h.playerId === card1.playerId);
   const hand2 = state.hands.find(h => h.playerId === card2.playerId);
@@ -694,13 +700,16 @@ export function discardDrawnCard(state: GameState, playerId: string): GameState 
 
 // ─── Phase: React ─────────────────────────────────────────────────────────────
 
+function isPlayerProtectedByKnock(state: GameState, playerId: string): boolean {
+  return Boolean(state.knockedById && playerId === state.knockedById);
+}
+
 function isReactionBlockedByKnock(
   state: GameState,
   reactingPlayerId: string,
   targetPlayerId: string,
 ): boolean {
-  if (!state.knockedById) return false;
-  return reactingPlayerId === state.knockedById || targetPlayerId === state.knockedById;
+  return isPlayerProtectedByKnock(state, reactingPlayerId) || isPlayerProtectedByKnock(state, targetPlayerId);
 }
 
 // A player submits a reaction (they claim to have a matching card)

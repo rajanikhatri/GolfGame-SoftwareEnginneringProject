@@ -5,6 +5,7 @@ import { TutorialPage } from './TutorialPage';
 import './onboarding.css';
 
 const TUTORIAL_COMPLETE_KEY = 'golfTutorialComplete';
+const RESTART_TUTORIAL_EVENT = 'golf:restart-tutorial';
 
 type OnboardingStep = 'landing' | 'tutorial' | 'complete';
 
@@ -29,6 +30,17 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     setStep(completed ? 'complete' : 'landing');
     setHasInitializedStep(true);
   }, [authenticatedUser, hasInitializedStep, loading]);
+
+  useEffect(() => {
+    const handleRestartTutorial = () => {
+      window.localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
+      setHasInitializedStep(true);
+      setStep('tutorial');
+    };
+
+    window.addEventListener(RESTART_TUTORIAL_EVENT, handleRestartTutorial);
+    return () => window.removeEventListener(RESTART_TUTORIAL_EVENT, handleRestartTutorial);
+  }, []);
 
   function goToAuth(rememberChoice = false) {
     if (rememberChoice) {

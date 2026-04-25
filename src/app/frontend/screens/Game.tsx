@@ -1946,6 +1946,7 @@ export default function Game() {
     if (phase !== 'power' || !pendingPower || !isMyTurn) return EMPTY_GRID_SELECTIONS;
     const player = players[playerIndex];
     if (!player) return EMPTY_GRID_SELECTIONS;
+    const isKnockedPlayer = Boolean(knockedBy && player.id === knockedBy);
 
     const firstSelection = powerSelections[0] ?? null;
     const selectionsFull = powerSelections.length >= 2;
@@ -1956,7 +1957,7 @@ export default function Game() {
       const alreadySelected = powerSelections.some(selection =>
         selection.playerIndex === playerIndex && selection.row === ri && selection.col === ci
       );
-      const canSelect = (
+      const canSelect = !isKnockedPlayer && (
         (pendingPower === '7' && !singlePeekLocked && playerIndex === 0 && !card.faceUp) ||
         (pendingPower === '8' && !singlePeekLocked && playerIndex !== 0 && !card.faceUp) ||
         (
@@ -1975,7 +1976,7 @@ export default function Game() {
       return canSelect ? [{ row: ri, col: ci }] : [];
     }));
     return nextSelectablePowerCards.length > 0 ? nextSelectablePowerCards : EMPTY_GRID_SELECTIONS;
-  }, [phase, pendingPower, players, powerSelections, isMyTurn, peekedCards]);
+  }, [phase, pendingPower, players, powerSelections, isMyTurn, peekedCards, knockedBy]);
 
   const commitPower9Choice = useCallback((doSwap: boolean) => {
     if (powerSelections.length < 2) return;
@@ -1994,6 +1995,7 @@ export default function Game() {
     if (!targetCard) return;
     const flatIndex = row * 2 + col;
     const targetPlayerId = players[playerIndex]?.id ?? '';
+    if (targetPlayerId && knockedBy === targetPlayerId && targetPlayerId !== myPlayerId) return;
     const selection: PowerSelection = { playerIndex, playerId: targetPlayerId, row, col, cardFlatIndex: flatIndex };
 
     if (pendingPower === '7' || pendingPower === '8') {
@@ -2070,6 +2072,8 @@ export default function Game() {
     setFocusTarget,
     setPeekRevealCard,
     setPowerCueCard,
+    knockedBy,
+    myPlayerId,
   ]);
   const handlePowerCardClickRef = useRef(handlePowerCardClick);
   handlePowerCardClickRef.current = handlePowerCardClick;
@@ -2228,6 +2232,10 @@ export default function Game() {
     return EMPTY_STYLE;
   };
   const swapPowerCueSize = 68;
+  const giveawayStatusLabel = canGiveAway
+    ? '🎁 GIVE 1 CARD TO THE OTHER PLAYER'
+    : `🎁 ${giveawayGiverName.toUpperCase()} IS CHOOSING A CARD TO GIVE`;
+  const isGiveawayStatus = phase === 'giveaway';
   const statusLabel = pendingPower === '7'
     ? (isMyTurn ? '👁 PEEK YOUR CARD' : `👁 ${players[currentPlayerIndex]?.name} IS USING 7`)
     : pendingPower === '8'
@@ -2241,7 +2249,7 @@ export default function Game() {
       ? (powerSelections.length === 0 ? '🔀 PICK 2 CARDS' : powerSelections.length === 1 ? '🔀 PICK 1 MORE CARD' : '🔀 SWAP SENT')
       : `🔀 ${players[currentPlayerIndex]?.name} IS USING 10`)
     : phase === 'giveaway'
-    ? (canGiveAway ? '🎁 GIVE A CARD AWAY' : `🎁 ${giveawayGiverName} IS GIVING A CARD`)
+    ? giveawayStatusLabel
     : phase === 'match_window'
     ? (canReactThisWindow ? '⚡ MATCH WINDOW' : '🚫 KNOCKED - MATCH LOCKED')
     : phase === 'swap'
@@ -2676,17 +2684,25 @@ export default function Game() {
         </div>
 
         <div className="game-header__status" style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 50, padding: '6px 14px',
+          display: 'flex', alignItems: 'center', gap: isGiveawayStatus ? 10 : 8,
+          background: isGiveawayStatus ? 'linear-gradient(135deg, rgba(255,193,7,0.22), rgba(255,111,0,0.22))' : 'rgba(255,255,255,0.08)',
+          border: isGiveawayStatus ? '2px solid rgba(255,213,79,0.72)' : '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 50, padding: isGiveawayStatus ? '10px 18px' : '6px 14px',
+          boxShadow: isGiveawayStatus ? '0 0 24px rgba(255,193,7,0.22)' : 'none',
         }}>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
             background: isMyTurn ? '#4CAF50' : '#FFC107',
             animation: 'pulse-glow 1.5s infinite',
           }} />
-          <span style={{ fontSize: 13, fontWeight: 800, color: 'white', fontFamily: 'Nunito' }}>
+          <span style={{
+            fontSize: isGiveawayStatus ? 16 : 13,
+            fontWeight: 900,
+            color: 'white',
+            fontFamily: 'Nunito',
+            letterSpacing: isGiveawayStatus ? '0.03em' : 'normal',
+            textTransform: isGiveawayStatus ? 'uppercase' : 'none',
+          }}>
             {statusLabel}
           </span>
         </div>
