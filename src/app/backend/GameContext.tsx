@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { registerPresence, subscribeToRoomPresence } from '../database/firebase';
-import { completeRoomMatch } from '../database/firebaseRooms';
+import { registerPresence, subscribeToRoomPresence, type PresenceCleanup } from '../database/firebase';
+import {
+  completeRoomMatch,
+  leaveRoomByCode,
+  removePlayerFromRoom,
+  sendRoomChatMessage,
+  subscribeToRoomChat,
+} from '../database/firebaseRooms';
 import {
   subscribeToGameState,
   syncEndPeek,
@@ -24,6 +30,7 @@ import {
   syncSetPeekRevealCard,
   syncSetPowerCueCard,
 } from '../database/firebaseGameSync';
+import { isPerfDebugEnabled } from '../frontend/lib/perfDebug';
 import {
   createInitialGameState,
   drawFromPile as engineDrawFromPile,
@@ -40,27 +47,12 @@ import {
   resolveReactionWindow as engineResolveReactionWindow,
   giveAwayCard as engineGiveAwayCard,
   knock as engineKnock,
+  calcHandScore,
   getCardValue,
   type GameState,
   type GamePhase as EnginePhase,
   type ReactionEntry,
 } from './gameEngine';
-
-type PerfGlobal = typeof globalThis & {
-  __GOLF_DEBUG_PERF__?: boolean;
-};
-
-function isPerfDebugEnabled() {
-  if (!import.meta.env.DEV) return false;
-
-  const perfGlobal = globalThis as PerfGlobal;
-  const globalFlag = perfGlobal.__GOLF_DEBUG_PERF__ === true;
-  const storageFlag =
-    typeof window !== 'undefined' &&
-    window.localStorage.getItem('golf:debug-perf') === '1';
-
-  return globalFlag || storageFlag;
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +131,7 @@ interface GameContextType {
   currentPlayerIndex: number;
   drawnCard: Card | null;
   phase: GamePhase;
+  pileActionPending: boolean;
   finalRound: boolean;
   knockedBy: string | null;
   matchWindowActive: boolean;
@@ -180,6 +173,7 @@ interface GameContextType {
   addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   endPeek: () => void;
   resetGame: () => void;
+  leaveMultiplayerGame: () => Promise<void>;
   resolvePower: (targetPlayerId?: string, cardFlatIndex?: number) => void;
   selectPower9Card: (targetPlayerId: string, cardFlatIndex: number) => void;
   confirmPower9: (doSwap: boolean, selections: PowerCardSelection[]) => void;
@@ -244,20 +238,7 @@ function shuffleArr<T>(arr: T[]): T[] {
 }
 
 export function calcScore(cards: (Card | null)[][]): number {
-  let total = 0;
-  for (let col = 0; col < 2; col++) {
-    const top = cards[0]?.[col];
-    const bot = cards[1]?.[col];
-    if (top?.faceUp && bot?.faceUp && top.value === bot.value) continue;
-    if (top?.faceUp) total += top.value;
-    if (bot?.faceUp) total += bot.value;
-  }
-  for (let row = 2; row < cards.length; row++) {
-    for (let col = 0; col < 2; col++) {
-      if (cards[row]?.[col]?.faceUp) total += cards[row][col]!.value;
-    }
-  }
-  return total;
+  return calcHandScore(cards.flatMap(row => row));
 }
 
 function flatCardsToRows(flat: (Card | null)[]): (Card | null)[][] {
@@ -423,6 +404,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [currentTurnPlayerId, setCurrentTurnPlayerId] = useState<string | null>(null);
   const [drawnCard,          setDrawnCard]          = useState<Card | null>(null);
   const [phase,              setPhase]              = useState<GamePhase>('draw');
+  const [pileActionPending,  setPileActionPending]  = useState(false);
   const [finalRound,         setFinalRound]         = useState(false);
   const [knockedBy,          setKnockedBy]          = useState<string | null>(null);
   const [matchWindowActive,  setMatchWindowActive]  = useState(false);
@@ -463,8 +445,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const roomCodeRef        = useRef('');
   const playerProfilesRef  = useRef<PlayerProfile[]>([]);
   const myPlayerIdRef      = useRef('');
+  const presenceCleanupRef = useRef<PresenceCleanup | null>(null);
+  const presenceRoomCodeRef = useRef("");
+  const presencePlayerIdRef = useRef("");
   const lastGameStateRef   = useRef<GameState | null>(null);
   const soloPendingGiveawayRef = useRef<{ giverId: string; receiverId: string } | null>(null);
+  const leavingPlayerIdsRef = useRef<Set<string>>(new Set());
 
   // These four are updated in effects (only used in async callbacks, fine to be one render late)
   useEffect(() => { drawPileRef.current    = drawPile;    }, [drawPile]);
@@ -492,6 +478,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const isMyTurn = gameMode === 'solo'
     ? currentPlayerIndex === 0
     : currentTurnPlayerId === myPlayerId;
+
+  useEffect(() => {
+    if (!pileActionPending) return;
+    if (phase !== 'draw' || drawnCard !== null || !isMyTurn) {
+      setPileActionPending(false);
+    }
+  }, [pileActionPending, phase, drawnCard, isMyTurn]);
 
   // ── Multiplayer: Subscribe to Firestore game state ──────────────────────────
   useEffect(() => {
@@ -536,11 +529,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // Find players who just went offline
       const disconnected = prev.filter(id => !onlineIds.includes(id));
       disconnected.forEach(id => {
+        if (leavingPlayerIdsRef.current.has(id)) {
+          return;
+        }
         const profile = playerProfilesRef.current.find(p => p.id === id);
         const name = profile?.name ?? 'A player';
         setDisconnectedPlayerName(name);
-        // Remove them from the game engine state in Firestore
-        syncRemovePlayer(roomCodeRef.current, id).catch(console.error);
+        Promise.allSettled([
+          syncRemovePlayer(roomCodeRef.current, id),
+          removePlayerFromRoom(roomCodeRef.current, id),
+        ]).catch(console.error);
         // Clear the notification after 4 seconds
         setTimeout(() => setDisconnectedPlayerName(null), 4000);
       });
@@ -548,6 +546,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameMode, roomCode]);
+
+  // ── Multiplayer: Room chat subscription ─────────────────────────────────────
+  useEffect(() => {
+    if (gameMode !== 'multiplayer' || !roomCode) return;
+    const unsub = subscribeToRoomChat(roomCode, (msgs) => {
+      setChatMessages(msgs.map(m => ({
+        id: m.id,
+        playerId: m.playerId,
+        playerName: m.playerName,
+        message: m.message,
+        timestamp: new Date(m.timestamp),
+      })));
+    });
+    return () => unsub();
   }, [gameMode, roomCode]);
 
   // ── Multiplayer: Reaction window timer ─────────────────────────────────────
@@ -694,7 +707,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gameActiveRef.current = true;
 
     // Register this player as online (RTDB onDisconnect handles cleanup automatically)
-    await registerPresence(roomCodeRef.current, myId);
+    const activeRoomCode = roomCodeRef.current;
+    const alreadyRegisteredPresence =
+      presenceCleanupRef.current &&
+      presenceRoomCodeRef.current === activeRoomCode &&
+      presencePlayerIdRef.current === myId;
+
+    if (!alreadyRegisteredPresence) {
+      if (presenceCleanupRef.current) {
+        await presenceCleanupRef.current().catch(console.error);
+        presenceCleanupRef.current = null;
+      }
+      presenceRoomCodeRef.current = "";
+      presencePlayerIdRef.current = "";
+      try {
+        presenceCleanupRef.current = await registerPresence(activeRoomCode, myId);
+        presenceRoomCodeRef.current = activeRoomCode;
+        presencePlayerIdRef.current = myId;
+      } catch (error) {
+        console.warn('Presence registration failed; continuing without RTDB presence.', error);
+        presenceCleanupRef.current = null;
+      }
+    }
 
     // Only the host passes roomPlayerIds — creates the authoritative deck in Firestore
     if (roomPlayerIds && roomPlayerIds.length > 0) {
@@ -1058,6 +1092,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const initGame = useCallback((roomPlayers?: Array<{ id: string; name: string }>) => {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
+    setPileActionPending(false);
     setPendingPower(null);
     setPower9Selection(null);
     setPowerFocusTargetId(null);
@@ -1088,6 +1123,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   ) => {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     gameActiveRef.current = true;
+    setPileActionPending(false);
     setPendingPower(null);
     aiMemoryRef.current = {};
     const configs = roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }));
@@ -1105,23 +1141,58 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const drawFromPile = useCallback(() => {
     if (gameMode === 'multiplayer') {
-      syncDrawFromPile(roomCodeRef.current).catch(console.error);
+      if (phase !== 'draw' || currentTurnPlayerId !== myPlayerId || pileActionPending) return;
+      setPileActionPending(true);
+      syncDrawFromPile(roomCodeRef.current).catch(error => {
+        setPileActionPending(false);
+        console.error(error);
+      });
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
     const nextState = engineDrawFromPile(buildSoloEngineState(), 'p1');
     applySoloEngineState(nextState);
-  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
+  }, [
+    applySoloEngineState,
+    buildSoloEngineState,
+    currentPlayerIndex,
+    currentTurnPlayerId,
+    gameMode,
+    myPlayerId,
+    phase,
+    pileActionPending,
+  ]);
 
   const takeFromDiscard = useCallback(() => {
     if (gameMode === 'multiplayer') {
-      syncTakeFromDiscard(roomCodeRef.current).catch(console.error);
+      if (
+        phase !== 'draw' ||
+        currentTurnPlayerId !== myPlayerId ||
+        discardPileRef.current.length === 0 ||
+        pileActionPending
+      ) {
+        return;
+      }
+      setPileActionPending(true);
+      syncTakeFromDiscard(roomCodeRef.current).catch(error => {
+        setPileActionPending(false);
+        console.error(error);
+      });
       return;
     }
     if (phase !== 'draw' || currentPlayerIndex !== 0) return;
     const nextState = engineTakeFromDiscard(buildSoloEngineState(), 'p1');
     applySoloEngineState(nextState);
-  }, [applySoloEngineState, buildSoloEngineState, gameMode, phase, currentPlayerIndex]);
+  }, [
+    applySoloEngineState,
+    buildSoloEngineState,
+    currentPlayerIndex,
+    currentTurnPlayerId,
+    gameMode,
+    myPlayerId,
+    phase,
+    pileActionPending,
+  ]);
 
   const skipPowerAction = useCallback(() => {
     if (gameMode === 'multiplayer') {
@@ -1226,7 +1297,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
-    setPlayers(nextPlayers);
+    const resolvedPlayers = reuseStablePlayers(playersRef.current, nextPlayers);
+    setPlayers(resolvedPlayers);
     setDrawPile(state.drawPile as Card[]);
     setDiscardPile(state.discardPile as Card[]);
     setCurrentPlayerIndex(state.currentPlayerIndex);
@@ -1245,7 +1317,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
     soloPendingGiveawayRef.current = state.pendingGiveaway;
-    playersRef.current = nextPlayers;
+    playersRef.current = resolvedPlayers;
     drawPileRef.current = state.drawPile as Card[];
     discardPileRef.current = state.discardPile as Card[];
     currentPlayerIndexRef.current = state.currentPlayerIndex;
@@ -1266,7 +1338,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         (best, [id, score]) => (score < best.score ? { id, score } : best),
         { id: '', score: Infinity },
       ).id;
-      setWinner(nextPlayers.find(player => player.id === winnerId) ?? null);
+      setWinner(resolvedPlayers.find(player => player.id === winnerId) ?? null);
       gameActiveRef.current = false;
     } else {
       setWinner(null);
@@ -1556,23 +1628,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [applySoloEngineState, buildSoloEngineState, currentPlayerIndex, finalRound, gameMode]);
 
   const sendChat = useCallback((message: string) => {
+    if (gameMode === 'multiplayer' && roomCodeRef.current) {
+      sendRoomChatMessage(roomCodeRef.current, {
+        playerId: myPlayerId || 'p1',
+        playerName: playerName || 'YOU',
+        message,
+      }).catch(console.error);
+      return; // Firestore subscription updates chatMessages for all clients
+    }
     setChatMessages(prev => [...prev, {
       id: Date.now().toString(),
       playerId: myPlayerId || 'p1',
       playerName: playerName || 'YOU',
       message, timestamp: new Date(),
     }]);
-  }, [myPlayerId, playerName]);
+  }, [gameMode, myPlayerId, playerName]);
 
   const addChatMessage = useCallback((msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    if (gameMode === 'multiplayer' && roomCodeRef.current) {
+      sendRoomChatMessage(roomCodeRef.current, msg).catch(console.error);
+      return; // Firestore subscription updates chatMessages for all clients
+    }
     setChatMessages(prev => [...prev, { ...msg, id: Date.now().toString(), timestamp: new Date() }]);
-  }, []);
+  }, [gameMode]);
 
   const endPeek = useCallback(() => {
+    if (phaseRef.current !== 'peek') return;
     if (gameMode === 'multiplayer') {
       syncEndPeek(roomCodeRef.current).catch(console.error);
     } else {
-      setPhase('draw');
+      setPhase(previousPhase => (previousPhase === 'peek' ? 'draw' : previousPhase));
     }
   }, [gameMode]);
 
@@ -1580,7 +1665,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     if (swapTimerRef.current) clearInterval(swapTimerRef.current);
     setSwapCountdown(null);
+    leavingPlayerIdsRef.current.clear();
+    prevOnlineIdsRef.current = [];
+    lastGameStateRef.current = null;
     gameActiveRef.current = false;
+    setPileActionPending(false);
     setPendingPower(null);
     setPower9Selection(null);
     setPowerFocusTargetId(null);
@@ -1597,8 +1686,49 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false);
     setReactionEntries([]);
     setAiThinking(false); setWinner(null);
-    setChatMessages(LOBBY_MESSAGES);
+    // Keep chat history in multiplayer — Firestore subscription re-populates it.
+    // Only reset to lobby filler messages for solo mode.
+    if (!roomCodeRef.current) {
+      setChatMessages(LOBBY_MESSAGES);
+    }
   }, []);
+
+  const leaveMultiplayerGame = useCallback(async () => {
+    const activeRoomCode = roomCodeRef.current;
+    const activePlayerId = myPlayerIdRef.current;
+
+    if (!activeRoomCode || !activePlayerId) {
+      if (presenceCleanupRef.current) {
+        await presenceCleanupRef.current().catch(console.error);
+        presenceCleanupRef.current = null;
+      }
+      presenceRoomCodeRef.current = "";
+      presencePlayerIdRef.current = "";
+      resetGame();
+      setRoomCode('');
+      setChatMessages(LOBBY_MESSAGES);
+      return;
+    }
+
+    leavingPlayerIdsRef.current.add(activePlayerId);
+
+    const cleanupPresence = presenceCleanupRef.current;
+    presenceCleanupRef.current = null;
+    presenceRoomCodeRef.current = "";
+    presencePlayerIdRef.current = "";
+
+    await Promise.allSettled([
+      cleanupPresence ? cleanupPresence() : Promise.resolve(),
+      syncRemovePlayer(activeRoomCode, activePlayerId),
+      leaveRoomByCode(activeRoomCode),
+    ]);
+
+    prevOnlineIdsRef.current = prevOnlineIdsRef.current.filter(id => id !== activePlayerId);
+    leavingPlayerIdsRef.current.delete(activePlayerId);
+    resetGame();
+    setRoomCode('');
+    setChatMessages(LOBBY_MESSAGES);
+  }, [resetGame]);
 
   return (
     <GameContext.Provider value={{
@@ -1608,7 +1738,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       myPlayerId, isMyTurn,
       players, setPlayers,
       drawPile, discardPile,
-      currentPlayerIndex, drawnCard, phase,
+      currentPlayerIndex, drawnCard, phase, pileActionPending,
       finalRound, knockedBy,
       matchWindowActive, matchCountdown,
       aiThinking, winner, chatMessages, lastPlayedCard, reactionEntries,
@@ -1626,7 +1756,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       knock: knockAction,
       skipPower: skipPowerAction,
       endPeek,
-      sendChat, addChatMessage, resetGame, resolvePower,
+      sendChat, addChatMessage, resetGame, leaveMultiplayerGame, resolvePower,
       selectPower9Card,
       confirmPower9: confirmPower9Action,
       usePower10: usePower10Action,

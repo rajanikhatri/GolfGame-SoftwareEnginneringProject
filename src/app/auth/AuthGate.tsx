@@ -86,6 +86,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleRestartTutorial = () => {
+    setError(null);
+    setMessage(null);
+    window.dispatchEvent(new Event('golf:restart-tutorial'));
+  };
+
   const handleForgotPassword = async () => {
     setError(null);
     setMessage(null);
@@ -279,6 +285,25 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             disabled={submitting}
           >
             {submitting ? 'PLEASE WAIT...' : mode === 'register' ? 'CREATE ACCOUNT' : 'LOGIN TO PLAY'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleRestartTutorial}
+            disabled={submitting}
+            style={{
+              alignSelf: 'center',
+              background: 'transparent',
+              border: 'none',
+              color: '#FFD54F',
+              cursor: submitting ? 'default' : 'pointer',
+              fontSize: 12,
+              fontWeight: 800,
+              padding: 0,
+              letterSpacing: '0.05em',
+            }}
+          >
+            VIEW TUTORIAL AGAIN
           </button>
 
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>

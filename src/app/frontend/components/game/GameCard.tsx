@@ -58,7 +58,7 @@ export function GameCard({
 }: GameCardProps) {
   const dims = SIZES[size];
   const isEmptySlot = !card;
-  const showBack = !isEmptySlot && (faceDown || !card.faceUp);
+  const showBack = faceDown || (!isEmptySlot && !card.faceUp);
 
   const isRed = card?.suit === 'hearts' || card?.suit === 'diamonds';
   const isJoker = card?.suit === 'joker';
@@ -83,20 +83,9 @@ export function GameCard({
     ...style,
   };
 
-  if (isEmptySlot) {
-  return (
-    <div
-      style={{
-        ...containerStyle,
-        border: '2px dashed rgba(190,224,255,0.35)',
-        background: 'linear-gradient(145deg, rgba(18,47,94,0.22), rgba(26,90,150,0.14))',
-        boxShadow: 'inset 0 0 16px rgba(120,190,255,0.08)',
-      }}
-      className={`game-card game-card-empty ${className}`}
-      onClick={onClick}
-    />
-  );
-}
+  if (isEmptySlot && !showBack) {
+    return null;
+  }
 
 if (showBack) {
   return (
