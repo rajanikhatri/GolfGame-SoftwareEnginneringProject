@@ -433,6 +433,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const drawnCardRef = useRef<Card | null>(null);
   const phaseRef = useRef<GamePhase>('draw');
   const pendingPowerRef = useRef<'7' | '8' | '9' | '10' | null>(null);
+  const power9SelectionRef = useRef<{ playerId: string; cardIndex: number }[] | null>(null);
+  const powerFocusTargetIdRef = useRef<string | null>(null);
+  const peekRevealCardRef = useRef<{ playerId: string; cardIndex: number } | null>(null);
+  const powerCueCardRef = useRef<{ playerId: string; cardIndex: number } | null>(null);
   const matchWindowActiveRef = useRef(false);
   const aiMemoryRef = useRef<Record<string, Record<string, AICardMemory>>>({});
   const gameActiveRef  = useRef(false);
@@ -460,6 +464,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { drawnCardRef.current = drawnCard; }, [drawnCard]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { pendingPowerRef.current = pendingPower; }, [pendingPower]);
+  useEffect(() => { power9SelectionRef.current = power9Selection; }, [power9Selection]);
+  useEffect(() => { powerFocusTargetIdRef.current = powerFocusTargetId; }, [powerFocusTargetId]);
+  useEffect(() => { peekRevealCardRef.current = peekRevealCard; }, [peekRevealCard]);
+  useEffect(() => { powerCueCardRef.current = powerCueCard; }, [powerCueCard]);
   useEffect(() => { matchWindowActiveRef.current = matchWindowActive; }, [matchWindowActive]);
 
   // These two must be in sync during render so applyEngineState always reads the latest value
@@ -601,7 +609,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (swapTimerRef.current) clearInterval(swapTimerRef.current);
         setSwapCountdown(null);
         if (gameMode === 'multiplayer') {
-          syncDiscardDrawn(roomCodeRef.current).catch(console.error);
+          const finishTurn = async () => {
+            if (phaseRef.current === 'power') {
+              await syncSkipPower(roomCodeRef.current);
+            }
+            await syncDiscardDrawn(roomCodeRef.current);
+          };
+          finishTurn().catch(console.error);
+        } else if (gameMode === 'solo') {
+          let nextState = buildSoloEngineState();
+          const actingPlayerId = nextState.playerOrder[nextState.currentPlayerIndex];
+          if (!actingPlayerId) return;
+          if (nextState.phase === 'power') {
+            nextState = engineSkipPower(nextState, actingPlayerId);
+          }
+          nextState = engineDiscardDrawnCard(nextState, actingPlayerId);
+          soloReactionsRef.current = [];
+          applySoloEngineState(nextState);
         }
       }
     }, 1000);
@@ -732,6 +756,128 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applySoloEngineState(state);
   }, [applySoloEngineState, buildSoloEngineState]);
 
+  function getAIKnownCardValue(
+    aiPlayerId: string,
+    targetPlayerId: string,
+    cardIndex: number,
+    card: Card | null,
+  ): number | null {
+    if (!card) return null;
+    if (card.faceUp) return card.value;
+    const memory = aiMemoryRef.current[aiPlayerId]?.[createMemoryKey(targetPlayerId, cardIndex)];
+    return memory && memory.cardId === card.id && memory.confidence >= 0.8 ? memory.value : null;
+  }
+
+  function getAIKnownScore(state: GameState, aiPlayerId: string): { score: number; knownStartingCards: number; cardCount: number } {
+    const hand = state.hands.find(entry => entry.playerId === aiPlayerId);
+    const cards = hand?.cards ?? [];
+    let score = 0;
+    let knownStartingCards = 0;
+    let cardCount = 0;
+
+    cards.forEach(card => {
+      if (card) cardCount++;
+    });
+
+    for (let col = 0; col < 2; col++) {
+      const top = cards[col] ?? null;
+      const bottom = cards[col + 2] ?? null;
+      const topValue = getAIKnownCardValue(aiPlayerId, aiPlayerId, col, top as Card | null);
+      const bottomValue = getAIKnownCardValue(aiPlayerId, aiPlayerId, col + 2, bottom as Card | null);
+      if (topValue !== null) knownStartingCards++;
+      if (bottomValue !== null) knownStartingCards++;
+      if (topValue !== null && bottomValue !== null && topValue === bottomValue) continue;
+      if (topValue !== null) score += topValue;
+      if (bottomValue !== null) score += bottomValue;
+    }
+
+    for (let index = 4; index < cards.length; index++) {
+      const card = cards[index] ?? null;
+      const value = getAIKnownCardValue(aiPlayerId, aiPlayerId, index, card as Card | null);
+      if (value !== null) score += value;
+    }
+
+    return { score, knownStartingCards, cardCount };
+  }
+
+  function shouldAIKnock(state: GameState, aiPlayerId: string): boolean {
+    if (state.finalRound || state.phase !== 'draw') return false;
+    const { score, knownStartingCards, cardCount } = getAIKnownScore(state, aiPlayerId);
+    if (cardCount <= 2) return true;
+    return knownStartingCards >= 4 && score <= 5;
+  }
+
+  function chooseAISwapIndex(state: GameState, aiPlayerId: string, drawn: Card): number {
+    const hand = state.hands.find(entry => entry.playerId === aiPlayerId);
+    const cards = hand?.cards ?? [];
+    let swapIndex = -1;
+    let worstValue = drawn.value;
+
+    cards.forEach((card, index) => {
+      if (index >= 4 || !card) return;
+      const knownValue = getAIKnownCardValue(aiPlayerId, aiPlayerId, index, card as Card);
+      if (knownValue !== null && knownValue > worstValue) {
+        worstValue = knownValue;
+        swapIndex = index;
+      }
+    });
+
+    if (swapIndex !== -1) return swapIndex;
+
+    // If the discard/drawn card is decent, take a calculated gamble on an unknown.
+    if (drawn.value <= 6) {
+      const unknownIndex = cards.findIndex((card, index) => {
+        if (index >= 4 || !card || card.faceUp) return false;
+        return getAIKnownCardValue(aiPlayerId, aiPlayerId, index, card as Card) === null;
+      });
+      if (unknownIndex !== -1) return unknownIndex;
+    }
+
+    return -1;
+  }
+
+  function shouldAITakeDiscard(state: GameState, aiPlayerId: string): boolean {
+    const topDiscard = state.discardPile[0] as Card | undefined;
+    if (!topDiscard) return false;
+    return chooseAISwapIndex(state, aiPlayerId, topDiscard) !== -1;
+  }
+
+  function chooseAIHiddenCard(
+    state: GameState,
+    aiPlayerId: string,
+    includeSelf: boolean,
+    includeOpponents: boolean,
+  ): { playerId: string; cardIndex: number; card: Card } | null {
+    const candidates = state.hands.flatMap(hand => {
+      if (!includeSelf && hand.playerId === aiPlayerId) return [];
+      if (!includeOpponents && hand.playerId !== aiPlayerId) return [];
+      return hand.cards.flatMap((card, index) => {
+        if (!card || card.faceUp) return [];
+        const knownValue = getAIKnownCardValue(aiPlayerId, hand.playerId, index, card as Card);
+        return knownValue === null ? [{ playerId: hand.playerId, cardIndex: index, card: card as Card }] : [];
+      });
+    });
+
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+  }
+
+  function finishAISwapOrDiscard(state: GameState, aiPlayerId: string): GameState {
+    if (state.phase !== 'swap' || !state.drawnCard) return state;
+    const swapIndex = chooseAISwapIndex(state, aiPlayerId, state.drawnCard as Card);
+    const nextState = swapIndex >= 0
+      ? engineSwapCard(state, aiPlayerId, swapIndex)
+      : engineDiscardDrawnCard(state, aiPlayerId);
+
+    if (swapIndex >= 0) {
+      const swappedCard = nextState.hands.find(hand => hand.playerId === aiPlayerId)?.cards[swapIndex];
+      if (swappedCard) {
+        rememberCardForAI(aiPlayerId, aiPlayerId, swapIndex, swappedCard as Card, 1);
+      }
+    }
+
+    return nextState;
+  }
+
   // ── AI Turn (solo only) ─────────────────────────────────────────────────────
   useEffect(() => {
     if (gameMode !== 'solo') return;
@@ -749,64 +895,86 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const actingPlayerId = playersRef.current[currentPlayerIndexRef.current]?.id;
       if (!actingPlayerId) return;
 
-      let state = engineDrawFromPile(buildSoloEngineState(), actingPlayerId);
-      if (state.phase === 'power' && state.pendingPower) {
-        const actingHand = state.hands.find(hand => hand.playerId === actingPlayerId);
-        const aiMemory = aiMemoryRef.current[actingPlayerId] ?? {};
+      let state = buildSoloEngineState();
 
+      if (shouldAIKnock(state, actingPlayerId)) {
+        applySoloEngineState(engineKnock(state, actingPlayerId));
+        return;
+      }
+
+      state = shouldAITakeDiscard(state, actingPlayerId)
+        ? engineTakeFromDiscard(state, actingPlayerId)
+        : engineDrawFromPile(state, actingPlayerId);
+
+      if (state.phase === 'power' && state.pendingPower) {
         if (state.pendingPower === '7') {
-          const ownIndex = actingHand?.cards.findIndex((card, index) => {
-            if (!card || card.faceUp) return false;
-            const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
-            return Boolean(memory && memory.cardId === card.id && memory.confidence >= 0.8);
-          }) ?? -1;
-          if (ownIndex >= 0 && actingHand?.cards[ownIndex]) {
-            rememberCardForAI(actingPlayerId, actingPlayerId, ownIndex, actingHand.cards[ownIndex] as Card, 1);
-          }
-          state = ownIndex >= 0 ? engineUsePower7(state, actingPlayerId, ownIndex) : engineSkipPower(state, actingPlayerId);
-        } else if (state.pendingPower === '8') {
-          const target = state.hands
-            .filter(hand => hand.playerId !== actingPlayerId)
-            .flatMap(hand => hand.cards.map((card, index) => ({ playerId: hand.playerId, index, card })))
-            .find(entry => {
-              if (!entry.card || entry.card.faceUp) return false;
-              const memory = aiMemory[createMemoryKey(entry.playerId, entry.index)];
-              return Boolean(memory && memory.cardId === entry.card.id && memory.confidence >= 0.8);
-            });
-          if (target?.card) {
-            rememberCardForAI(actingPlayerId, target.playerId, target.index, target.card as Card, 1);
+          const target = chooseAIHiddenCard(state, actingPlayerId, true, false);
+          if (target) {
+            rememberCardForAI(actingPlayerId, target.playerId, target.cardIndex, target.card, 1);
           }
           state = target
-            ? engineUsePower8(state, actingPlayerId, target.playerId, target.index)
+            ? engineUsePower7(state, actingPlayerId, target.cardIndex)
+            : engineSkipPower(state, actingPlayerId);
+        } else if (state.pendingPower === '8') {
+          const target = chooseAIHiddenCard(state, actingPlayerId, false, true);
+          if (target) {
+            rememberCardForAI(actingPlayerId, target.playerId, target.cardIndex, target.card, 1);
+          }
+          state = target
+            ? engineUsePower8(state, actingPlayerId, target.playerId, target.cardIndex)
             : engineSkipPower(state, actingPlayerId);
         } else if (state.pendingPower === '9') {
-          const selections = state.hands
+          const candidates = state.hands
             .flatMap(hand =>
               hand.cards.map((card, index) => ({
                 playerId: hand.playerId,
                 cardIndex: index,
                 card,
+                knownValue: getAIKnownCardValue(actingPlayerId, hand.playerId, index, card as Card | null),
               })),
             )
             .filter(selection => selection.card !== null)
-            .slice(0, 2);
+            .sort((a, b) => {
+              const aKnown = a.knownValue !== null ? 1 : 0;
+              const bKnown = b.knownValue !== null ? 1 : 0;
+              return aKnown - bKnown;
+            });
+          const first = candidates[0];
+          const second = candidates.find(candidate => candidate.playerId !== first?.playerId);
+          const selections = first && second ? [first, second] : [];
 
           if (selections.length === 2 && selections[0].playerId !== selections[1].playerId) {
             state = engineSelectPower9Card(state, actingPlayerId, selections[0].playerId, selections[0].cardIndex);
             state = engineSelectPower9Card(state, actingPlayerId, selections[1].playerId, selections[1].cardIndex);
             rememberCardForAI(actingPlayerId, selections[0].playerId, selections[0].cardIndex, selections[0].card as Card, 1);
             rememberCardForAI(actingPlayerId, selections[1].playerId, selections[1].cardIndex, selections[1].card as Card, 1);
-            state = engineConfirmPower9(state, actingPlayerId, Math.random() < 0.5);
+            const [first, second] = selections;
+            const firstIsOwn = first.playerId === actingPlayerId;
+            const secondIsOwn = second.playerId === actingPlayerId;
+            const shouldSwap =
+              (firstIsOwn && !secondIsOwn && first.card!.value > second.card!.value) ||
+              (secondIsOwn && !firstIsOwn && second.card!.value > first.card!.value) ||
+              (!firstIsOwn && !secondIsOwn && Math.random() < 0.35);
+            state = engineConfirmPower9(state, actingPlayerId, shouldSwap);
           } else {
             state = engineSkipPower(state, actingPlayerId);
           }
         } else if (state.pendingPower === '10') {
-          const selections = state.hands
+          const ownCards = state.hands
+            .find(hand => hand.playerId === actingPlayerId)?.cards
+            .map((card, index) => ({
+              playerId: actingPlayerId,
+              cardIndex: index,
+              card,
+              value: getAIKnownCardValue(actingPlayerId, actingPlayerId, index, card as Card | null),
+            }))
+            .filter(entry => entry.card !== null) ?? [];
+          const opponentCards = state.hands
+            .filter(hand => hand.playerId !== actingPlayerId)
             .flatMap(hand => hand.cards.map((card, index) => ({ playerId: hand.playerId, cardIndex: index, card })))
-            .filter(entry => entry.card !== null)
-            .slice(0, 6);
-          const first = selections[0];
-          const second = selections.find(entry => entry.playerId !== first?.playerId);
+            .filter(entry => entry.card !== null);
+          const first = [...ownCards].sort((a, b) => (b.value ?? 8) - (a.value ?? 8))[0];
+          const second = opponentCards[Math.floor(Math.random() * opponentCards.length)];
           state = first && second
             ? engineUsePower10(
                 state,
@@ -818,49 +986,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (state.phase === 'swap' && state.drawnCard) {
-        const actingHand = state.hands.find(hand => hand.playerId === actingPlayerId);
-        const cards = actingHand?.cards ?? [];
-        const aiMemory = aiMemoryRef.current[actingPlayerId] ?? {};
-        let swapIndex = -1;
-        let worstVal = state.drawnCard.value;
-
-        cards.forEach((card, index) => {
-          if (!card) return;
-          const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
-          const knownValue =
-            card.faceUp ? card.value :
-            memory && memory.cardId === card.id && memory.confidence >= 0.8 ? memory.value :
-            null;
-          if (knownValue !== null && knownValue > worstVal) {
-            worstVal = knownValue;
-            swapIndex = index;
-          }
-        });
-
-        if (swapIndex === -1) {
-          cards.forEach((card, index) => {
-            if (card && !card.faceUp) {
-              const memory = aiMemory[createMemoryKey(actingPlayerId, index)];
-              if (!memory || memory.cardId !== card.id || memory.confidence < 0.8) {
-                swapIndex = index;
-              }
-            }
-          });
-        }
-
-        state = swapIndex >= 0
-          ? engineSwapCard(state, actingPlayerId, swapIndex)
-          : engineDiscardDrawnCard(state, actingPlayerId);
-
-        if (swapIndex >= 0) {
-          const nextHand = state.hands.find(hand => hand.playerId === actingPlayerId);
-          const swappedCard = nextHand?.cards[swapIndex];
-          if (swappedCard) {
-            rememberCardForAI(actingPlayerId, actingPlayerId, swapIndex, swappedCard as Card, 1);
-          }
-        }
-      }
+      state = finishAISwapOrDiscard(state, actingPlayerId);
 
       applySoloEngineState(state);
     }, thinkTime);
@@ -968,6 +1094,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gameActiveRef.current = true;
     setPileActionPending(false);
     setPendingPower(null);
+    setPower9Selection(null);
+    setPowerFocusTargetId(null);
+    setPeekRevealCardState(null);
+    setPowerCueCardState(null);
     const configs = roomPlayers
       ? roomPlayers.map((p, i) => ({ ...(PLAYER_CONFIGS[i] ?? PLAYER_CONFIGS[0]), id: p.id, name: p.name }))
       : PLAYER_CONFIGS;
@@ -1005,6 +1135,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setPlayers(newPlayers); setDrawPile(state.drawPile); setDiscardPile(state.discardPile);
     setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false); setReactionEntries([]);
+    setPendingPower(null); setPower9Selection(null); setPowerFocusTargetId(null); setPeekRevealCardState(null); setPowerCueCardState(null);
     setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setGiveawayGiverId(null);
   }, []);
 
@@ -1179,6 +1310,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setMatchWindowActive(state.reactionWindowOpen);
     setReactionEntries((state.reactions as ReactionEntry[]) ?? []);
     setPendingPower(state.pendingPower as '7' | '8' | '9' | '10' | null);
+    setPower9Selection((state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null);
+    setPowerFocusTargetId((state.powerFocusTargetId as string | null) ?? null);
+    setPeekRevealCardState((state.peekRevealCard as { playerId: string; cardIndex: number } | null) ?? null);
+    setPowerCueCardState((state.powerCueCard as { playerId: string; cardIndex: number } | null) ?? null);
     setGiveawayGiverId(state.pendingGiveaway?.giverId ?? null);
     setLastPlayedCard(state.lastDiscardedCard as Card | null);
     soloPendingGiveawayRef.current = state.pendingGiveaway;
@@ -1191,6 +1326,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     finalRoundRef.current = state.finalRound;
     knockedByRef.current = state.knockedById;
     pendingPowerRef.current = state.pendingPower as '7' | '8' | '9' | '10' | null;
+    power9SelectionRef.current = (state.power9Selection as { playerId: string; cardIndex: number }[] | null) ?? null;
+    powerFocusTargetIdRef.current = (state.powerFocusTargetId as string | null) ?? null;
+    peekRevealCardRef.current = (state.peekRevealCard as { playerId: string; cardIndex: number } | null) ?? null;
+    powerCueCardRef.current = (state.powerCueCard as { playerId: string; cardIndex: number } | null) ?? null;
     matchWindowActiveRef.current = state.reactionWindowOpen;
     lastPlayedCardRef.current = state.lastDiscardedCard as Card | null;
 
@@ -1231,7 +1370,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         acc[player.id] = player.score;
         return acc;
       }, {}),
-      power9Selection: null,
+      power9Selection: power9SelectionRef.current,
+      powerFocusTargetId: powerFocusTargetIdRef.current,
+      peekRevealCard: peekRevealCardRef.current,
+      powerCueCard: powerCueCardRef.current,
       pendingGiveaway: soloPendingGiveawayRef.current,
       ...overrides,
     };
@@ -1387,8 +1529,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const selectPower9Card = useCallback((targetPlayerId: string, cardFlatIndex: number) => {
     if (gameMode === 'multiplayer') {
       syncSelectPower9Card(roomCodeRef.current, targetPlayerId, cardFlatIndex).catch(console.error);
+      return;
     }
-  }, [gameMode]);
+    const nextState = engineSelectPower9Card(buildSoloEngineState(), 'p1', targetPlayerId, cardFlatIndex);
+    applySoloEngineState(nextState);
+  }, [applySoloEngineState, buildSoloEngineState, gameMode]);
 
   // Immediately writes powerFocusTargetId to Firestore so all non-acting clients
   // can highlight the targeted player's panel in real time (powers 8/10).
@@ -1396,19 +1541,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const setFocusTargetAction = useCallback((targetPlayerId: string | null) => {
     if (gameMode === 'multiplayer') {
       syncSetPowerFocusTarget(roomCodeRef.current, targetPlayerId).catch(console.error);
+      return;
     }
+    powerFocusTargetIdRef.current = targetPlayerId;
+    setPowerFocusTargetId(targetPlayerId);
   }, [gameMode]);
 
   const setPeekRevealCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
     if (gameMode === 'multiplayer') {
       syncSetPeekRevealCard(roomCodeRef.current, card).catch(console.error);
+      return;
     }
+    peekRevealCardRef.current = card;
+    setPeekRevealCardState(card);
   }, [gameMode]);
 
   const setPowerCueCardAction = useCallback((card: { playerId: string; cardIndex: number } | null) => {
     if (gameMode === 'multiplayer') {
       syncSetPowerCueCard(roomCodeRef.current, card).catch(console.error);
+      return;
     }
+    powerCueCardRef.current = card;
+    setPowerCueCardState(card);
   }, [gameMode]);
 
   const confirmPower9Action = useCallback((doSwap: boolean, selections: PowerCardSelection[]) => {
@@ -1517,6 +1671,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     gameActiveRef.current = false;
     setPileActionPending(false);
     setPendingPower(null);
+    setPower9Selection(null);
+    setPowerFocusTargetId(null);
+    setPeekRevealCardState(null);
+    setPowerCueCardState(null);
     aiMemoryRef.current = {};
     setGiveawayGiverId(null);
     setGameMode(null);
