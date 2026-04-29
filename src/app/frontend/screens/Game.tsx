@@ -702,6 +702,13 @@ type RegisterCardNode = (
   node: HTMLDivElement | null,
 ) => void;
 
+function getSharedHandGridPlacement(row: number, col: number): CSSProperties {
+  return {
+    gridColumn: row < 2 ? col + 1 : row + 1,
+    gridRow: row < 2 ? row + 1 : col + 1,
+  };
+}
+
 // ─── Player Card Grid ─────────────────────────────────────────────────────────
 function PlayerCardGrid({
   player, isActive, isYou, onCardClick, selectedForSwap,
@@ -740,24 +747,25 @@ function PlayerCardGrid({
     reactionSelectable: Boolean(reactionSelectable),
   });
 
+  const gridColumnCount = Math.max(2, player.cards.length);
+
   return (
     <div
       className={`game-player-grid${isYou ? ' game-player-grid--bottom' : ''}`}
-      style={
-        isYou
-          ? undefined
-          : { display: 'flex', flexDirection: 'column', gap: 'var(--game-player-grid-row-gap, 6px)' }
-      }
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${gridColumnCount}, max-content)`,
+        gridAutoRows: 'auto',
+        columnGap: 'var(--game-player-grid-col-gap, 6px)',
+        rowGap: 'var(--game-player-grid-row-gap, 6px)',
+        justifyContent: 'center',
+      }}
     >
       {player.cards.map((row, ri) => (
         <div
           key={ri}
           className={`game-player-grid__row${isYou ? ' game-player-grid__row--bottom' : ''}`}
-          style={
-            isYou
-              ? undefined
-              : { display: 'flex', gap: 'var(--game-player-grid-col-gap, 6px)' }
-          }
+          style={{ display: 'contents' }}
         >
           {row.map((card, ci) => {
             const isPeeked = Boolean(revealCards?.some(selection => selection.row === ri && selection.col === ci));
@@ -832,8 +840,7 @@ function PlayerCardGrid({
                   : { type: 'spring', stiffness: 420, damping: 16, opacity: { duration: 0.18 } }}
                 style={{
                   position: 'relative',
-                  gridColumn: isYou ? (ri < 2 ? ci + 1 : ri + 1) : undefined,
-                  gridRow: isYou ? (ri < 2 ? ri + 1 : ci + 1) : undefined,
+                  ...getSharedHandGridPlacement(ri, ci),
                   filter: shouldDimForPower ? 'grayscale(0.32) saturate(0.72) brightness(0.8)' : undefined,
                 }}
               >
