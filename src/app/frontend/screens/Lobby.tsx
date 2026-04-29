@@ -58,8 +58,6 @@ export default function Lobby() {
   const [showRulesDetails, setShowRulesDetails] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const themePickerRef = useRef<HTMLDivElement>(null);
-  const seenPlayerIdsRef = useRef<Set<string>>(new Set());
-  const isFirstRoomUpdate = useRef(true);
   const myUserIdRef = useRef<string | null>(null);
   const roomStartFinalizedRef = useRef(false);
   const ROOM_CODE = roomCode || 'GOLF-0000';
@@ -119,21 +117,10 @@ export default function Lobby() {
       );
       setIsHost(Boolean(myPlayer) && myPlayer.id === room.hostId);
 
-      if (isFirstRoomUpdate.current) {
-        isFirstRoomUpdate.current = false;
-        room.players.forEach(player => seenPlayerIdsRef.current.add(player.id));
-      } else {
-        for (const player of room.players) {
-          if (!seenPlayerIdsRef.current.has(player.id)) {
-            seenPlayerIdsRef.current.add(player.id);
-            addChatMessage({ playerId: player.id, playerName: player.name, message: 'Joined the room.' });
-          }
-        }
-      }
     });
 
     return () => unsub();
-  }, [gameMode, roomCode, playerName, addChatMessage, initMultiplayer, navigate]);
+  }, [gameMode, roomCode, playerName, initMultiplayer, navigate]);
 
   useEffect(() => {
     if (gameMode !== 'solo') return;

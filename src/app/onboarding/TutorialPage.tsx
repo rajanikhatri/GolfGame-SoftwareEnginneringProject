@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 import { useState } from 'react';
+import { MATCH_REACTION_SECONDS, OPENING_PEEK_SECONDS } from '../backend/gameEngine';
 
 interface TutorialPageProps {
   onFinish: (rememberChoice: boolean) => void;
@@ -54,7 +55,7 @@ const tutorialSteps = [
       <>
         <p>
           When the game starts, you get{' '}
-          <strong style={{ color: '#FFD600' }}>5 seconds</strong> to peek at
+          <strong style={{ color: '#FFD600' }}>{OPENING_PEEK_SECONDS} seconds</strong> to peek at
           your <strong>bottom 2 cards only</strong>. Your top 2 remain hidden.
         </p>
         <p style={{ marginTop: 8 }}>
@@ -93,7 +94,7 @@ const tutorialSteps = [
       <>
         <p>
           Every time a card is discarded, a{' '}
-          <strong style={{ color: '#FFD600' }}>3-second Matching Window</strong>{' '}
+          <strong style={{ color: '#FFD600' }}>{MATCH_REACTION_SECONDS}-second Matching Window</strong>{' '}
           opens.
         </p>
         <p style={{ marginTop: 8 }}>
@@ -337,7 +338,7 @@ function StepVisual({ type }: { type: string }) {
       <div className="tutorial-score-card">
         <Zap size={36} color="#FFD600" />
         <span>React fast!</span>
-        <strong>3 seconds</strong>
+        <strong>{MATCH_REACTION_SECONDS} seconds</strong>
       </div>
     );
   }

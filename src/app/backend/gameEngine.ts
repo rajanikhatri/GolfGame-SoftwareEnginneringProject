@@ -3,6 +3,10 @@
 export type Suit = 'hearts' | 'diamonds' | 'spades' | 'clubs' | 'joker';
 export type PowerRank = '7' | '8' | '9' | '10';
 
+export const OPENING_PEEK_SECONDS = 10;
+export const MATCH_REACTION_SECONDS = 10;
+export const SWAP_DECISION_SECONDS = 20;
+
 export interface Card {
   id: string;
   suit: Suit;
@@ -20,11 +24,11 @@ export interface PlayerHand {
 }
 
 export type GamePhase =
-  | 'peek'       // 5-second preview at game start
+  | 'peek'       // opening preview at game start
   | 'draw'       // current player must draw a card
   | 'power'      // current player decides to use or skip power card
   | 'swap'       // current player decides to keep drawn card (swap) or discard it
-  | 'react'      // 3-second reaction window after a discard
+  | 'react'      // reaction window after a discard
   | 'giveaway'
   | 'game_over'; // game has ended
 
@@ -427,7 +431,7 @@ export function removePlayer(state: GameState, playerId: string): GameState {
 
 // ─── Phase: Peek ──────────────────────────────────────────────────────────────
 
-// Called after the 5-second peek timer ends on all clients.
+// Called after the opening peek timer ends on all clients.
 // Ignore stale timer completions once the game has already advanced.
 export function endPeekPhase(state: GameState): GameState {
   if (state.phase !== 'peek') return state;
@@ -751,7 +755,7 @@ export function compareReactionEntries(a: ReactionEntry, b: ReactionEntry): numb
   return a.cardIndex - b.cardIndex;
 }
 
-// Called when the 3-second reaction window closes
+// Called when the reaction window closes
 export function resolveReactionWindow(state: GameState): GameState {
   if (!state.reactionWindowOpen) return state;
 

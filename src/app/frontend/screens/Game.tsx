@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Flag, ChevronDown, Zap, Eye, MessageSquare, Send } from 'lucide-react';
 import { useGame, type Card, type Player, type PowerCardSelection } from '../../backend/GameContext';
-import { calcHandScore, compareReactionEntries } from '../../backend/gameEngine';
+import { calcHandScore, compareReactionEntries, MATCH_REACTION_SECONDS, OPENING_PEEK_SECONDS } from '../../backend/gameEngine';
 import { HandCue, SwapExchangeCue, type OverlayPoint } from '../components/HandCue';
 import { GameCard } from '../components/game/GameCard';
 import { getStoredTableThemeId, getTableTheme } from '../lib/tableTheme';
@@ -46,7 +46,7 @@ function MatchBanner({ countdown }: { countdown: number }) {
           <circle
             cx="26" cy="26" r="22" fill="none" stroke="white" strokeWidth="4"
             strokeDasharray="138"
-            strokeDashoffset={138 - (countdown / 3) * 138}
+            strokeDashoffset={138 - (countdown / MATCH_REACTION_SECONDS) * 138}
             strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.9s linear' }}
           />
@@ -1459,7 +1459,7 @@ export default function Game() {
 
   const [showFinalBanner, setShowFinalBanner] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
-  const [peekTimeLeft, setPeekTimeLeft] = useState(5);
+  const [peekTimeLeft, setPeekTimeLeft] = useState(OPENING_PEEK_SECONDS);
   const [peekActive, setPeekActive] = useState(false);
   const [exitPending, setExitPending] = useState(false);
   const [tableThemeId] = useState(() => getStoredTableThemeId());
@@ -1492,7 +1492,7 @@ export default function Game() {
 
   useEffect(() => {
     if (phase === 'peek') {
-      setPeekTimeLeft(5);
+      setPeekTimeLeft(OPENING_PEEK_SECONDS);
       setPeekActive(true);
       return;
     }

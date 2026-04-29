@@ -69,6 +69,16 @@ function leaderboardRef(uid: string) {
   return doc(leaderboardCol, uid);
 }
 
+function joinedRoomMessage(player: FirebaseRoomPlayer, id: string, timestamp: number): FirebaseRoomChatMessage {
+  return {
+    id,
+    playerId: player.id,
+    playerName: player.name,
+    message: 'Joined the room.',
+    timestamp,
+  };
+}
+
 export function normalizeRoomCode(code: string) {
   return String(code).toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 16);
 }
@@ -117,6 +127,7 @@ export async function createRoomWithRetries(
     };
 
     try {
+      const chatRef = doc(roomChatCol(code));
       await runTransaction(firebaseDb, async (tx) => {
         const snap = await tx.get(ref);
         if (snap.exists()) throw new Error('ROOM_CODE_COLLISION');
@@ -133,6 +144,7 @@ export async function createRoomWithRetries(
           password: options.password ?? '',
           isPrivate: options.isPrivate ?? false,
         } satisfies FirebaseRoomDoc);
+        tx.set(chatRef, joinedRoomMessage(host, chatRef.id, now));
       });
       return { code, playerId: user.uid };
     } catch (e) {
@@ -168,24 +180,28 @@ export async function joinRoomByCode(code: string, profile: MultiplayerProfileIn
     const nextSlot = [0, 1, 2, 3].find((slot) => !usedSlots.has(slot));
     if (nextSlot === undefined) throw new Error('No slot available.');
 
+    const now = Date.now();
+    const nextPlayer: FirebaseRoomPlayer = {
+      id: user.uid,
+      name: profile.name.trim(),
+      avatar: profile.avatar,
+      color: profile.color,
+      glowColor: profile.glowColor,
+      slotIndex: nextSlot,
+      ready: true,
+      joinedAt: now,
+    };
+    const chatRef = doc(roomChatCol(normalized));
     const nextPlayers: FirebaseRoomPlayer[] = [
       ...room.players,
-      {
-        id: user.uid,
-        name: profile.name.trim(),
-        avatar: profile.avatar,
-        color: profile.color,
-        glowColor: profile.glowColor,
-        slotIndex: nextSlot,
-        ready: true,
-        joinedAt: Date.now(),
-      },
+      nextPlayer,
     ];
 
     tx.update(ref, {
       players: nextPlayers,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+    tx.set(chatRef, joinedRoomMessage(nextPlayer, chatRef.id, now));
   });
 
   return { code: normalized, playerId: user.uid };

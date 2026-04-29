@@ -49,6 +49,8 @@ import {
   knock as engineKnock,
   calcHandScore,
   getCardValue,
+  MATCH_REACTION_SECONDS,
+  SWAP_DECISION_SECONDS,
   type GameState,
   type GamePhase as EnginePhase,
   type ReactionEntry,
@@ -408,7 +410,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [finalRound,         setFinalRound]         = useState(false);
   const [knockedBy,          setKnockedBy]          = useState<string | null>(null);
   const [matchWindowActive,  setMatchWindowActive]  = useState(false);
-  const [matchCountdown,     setMatchCountdown]     = useState(3);
+  const [matchCountdown,     setMatchCountdown]     = useState(MATCH_REACTION_SECONDS);
   const [aiThinking,         setAiThinking]         = useState(false);
   const [winner,             setWinner]             = useState<Player | null>(null);
   const [chatMessages,       setChatMessages]       = useState<ChatMessage[]>(LOBBY_MESSAGES);
@@ -564,12 +566,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [gameMode, roomCode]);
 
   // ── Multiplayer: Reaction window timer ─────────────────────────────────────
-  // Each client independently runs the 3-second countdown.
+  // Each client independently runs the reaction countdown.
   // The first one to call syncResolveReactionWindow wins the Firestore transaction.
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !matchWindowActive) return;
-    let count = 3;
-    setMatchCountdown(3);
+    let count = MATCH_REACTION_SECONDS;
+    setMatchCountdown(MATCH_REACTION_SECONDS);
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     matchTimerRef.current = setInterval(() => {
       count--;
@@ -589,7 +591,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     completeRoomMatch(roomCode).catch(console.error);
   }, [gameMode, roomCode, phase]);
 
-  // ── 10-second swap decision timer ───────────────────────────────────────────
+  // ── Swap decision timer ─────────────────────────────────────────────────────
   // Starts when it's the local player's turn and the phase is 'swap' or 'power'.
   // Auto-discards the drawn card if the player doesn't act in time.
   useEffect(() => {
@@ -599,8 +601,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setSwapCountdown(null);
       return;
     }
-    let count = 10;
-    setSwapCountdown(10);
+    let count = SWAP_DECISION_SECONDS;
+    setSwapCountdown(SWAP_DECISION_SECONDS);
     if (swapTimerRef.current) clearInterval(swapTimerRef.current);
     swapTimerRef.current = setInterval(() => {
       count--;
@@ -998,8 +1000,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (gameMode !== 'solo' || !matchWindowActive) return;
 
-    let count = 3;
-    setMatchCountdown(3);
+    let count = MATCH_REACTION_SECONDS;
+    setMatchCountdown(MATCH_REACTION_SECONDS);
 
     if (matchTimerRef.current) clearInterval(matchTimerRef.current);
 
@@ -1114,7 +1116,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     seedSoloAIMemory(state);
     applySoloEngineState(state, profiles);
     setAiThinking(false);
-    setMatchCountdown(3);
+    setMatchCountdown(MATCH_REACTION_SECONDS);
   }, [applySoloEngineState]);
 
   const initGameFromState = useCallback((
@@ -1136,7 +1138,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setCurrentPlayerIndex(0); setCurrentTurnPlayerId(configs[0]?.id ?? null); setDrawnCard(null); setPhase('draw');
     setFinalRound(false); setKnockedBy(null); setMatchWindowActive(false); setReactionEntries([]);
     setPendingPower(null); setPower9Selection(null); setPowerFocusTargetId(null); setPeekRevealCardState(null); setPowerCueCardState(null);
-    setMatchCountdown(3); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setGiveawayGiverId(null);
+    setMatchCountdown(MATCH_REACTION_SECONDS); setAiThinking(false); setWinner(null); setLastPlayedCard(null); setGiveawayGiverId(null);
   }, []);
 
   const drawFromPile = useCallback(() => {
